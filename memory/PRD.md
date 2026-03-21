@@ -7,7 +7,7 @@ NeoChef est une PWA de gestion de restaurant complète comprenant:
 - Système de permissions pour le staff
 - Traductions automatiques des menus (multi-langues)
 - Génération de PDF (menus, propositions événements, factures, commandes)
-- Rapport mensuel des commandes fournisseurs
+- Rapport mensuel des commandes fournisseurs (par produit ou par date)
 
 ## Architecture Technique
 - **Frontend**: Expo for Web (React Native Web) - `/app/temp_clone/frontend`
@@ -15,14 +15,28 @@ NeoChef est une PWA de gestion de restaurant complète comprenant:
 - **Database**: MongoDB
 - **Build servi depuis**: `/app/frontend/build` (copie de `temp_clone/frontend/dist`)
 
-## Session du 21 Mars 2026
+## Session du 21 Mars 2026 (suite)
 
-### Bugs Corrigés
+### Nouvelles Fonctionnalités
+
+#### 1. Filtre "Mode" pour le Rapport Mensuel ✅
+- **Ajout d'un 4ème filtre** "Mode" avec deux options :
+  - **Par Produit** : Affiche le total par produit (Coca: X unités, Evian: Y unités)
+  - **Par Date** : Affiche les commandes jour par jour (18 février: quoi, 24 février: quoi)
+- Le titre du modal change dynamiquement selon le mode sélectionné
+- Le PDF est aussi généré selon le mode choisi
+
+#### 2. Correction du Téléchargement PDF (iOS) ✅
+- **Problème** : Sur iOS Safari, le PDF s'ouvrait en page blanche
+- **Solution** : Remplacement de `window.open()` par un téléchargement direct via `fetch()` + `blob`
+- Le PDF se télécharge maintenant correctement sur tous les appareils
+
+### Bugs Corrigés (session précédente)
 
 #### 1. Rapport Mensuel Bloqué ✅
 - **Cause**: Les routes backend étaient correctement ordonnées
 - **Vérification**: L'API `/api/supplier-orders/monthly-report` fonctionne correctement
-- **Résultat**: Le rapport s'affiche avec filtres (fournisseur, dates, type), résumé et bouton PDF
+- **Résultat**: Le rapport s'affiche avec filtres (fournisseur, dates, type, mode), résumé et bouton PDF
 
 #### 2. Modal PDF Facturation Ajouté ✅
 - **Modification**: Ajout d'un modal PDF unifié pour Devis et Factures

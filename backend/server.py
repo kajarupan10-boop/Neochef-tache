@@ -8013,9 +8013,10 @@ async def get_monthly_report(
     end_date: str,    # Format: YYYY-MM-DD
     supplier_id: Optional[str] = None,
     order_type: Optional[str] = None,  # command, consigne, reclamation
+    view_mode: Optional[str] = "product",  # product ou date
     current_user: dict = Depends(get_current_user)
 ):
-    """Rapport mensuel des commandes par produit"""
+    """Rapport mensuel des commandes par produit ou par date"""
     try:
         start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
@@ -8036,37 +8037,89 @@ async def get_monthly_report(
         
         orders = await supplier_orders_collection.find(query).to_list(length=None)
         
-        product_totals = {}
-        for order in orders:
-            supplier_name = order.get("supplier_name", "Inconnu")
-            for item in order.get("items", []):
-                product_name = item.get("product_name", "Produit inconnu")
-                product_type = item.get("product_type", order.get("order_type", "command"))
-                quantity = item.get("quantity", 0)
-                price_ht = item.get("price_ht", 0) or 0
+        if view_mode == "date":
+            # Grouper par date
+            date_totals = {}
+            for order in orders:
+                order_date = order.get("created_at")
+                if isinstance(order_date, datetime):
+                    date_key = order_date.strftime("%Y-%m-%d")
+                else:
+                    date_key = str(order_date)[:10] if order_date else "Inconnue"
                 
-                key = f"{supplier_name}::{product_name}::{product_type}"
-                if key not in product_totals:
-                    product_totals[key] = {
-                        "product_name": product_name,
-                        "product_type": product_type,
-                        "supplier_name": supplier_name,
-                        "total_quantity": 0,
+                if date_key not in date_totals:
+                    date_totals[date_key] = {
+                        "date": date_key,
+                        "orders": [],
+                        "total_items": 0,
                         "total_amount": 0
                     }
-                product_totals[key]["total_quantity"] += quantity
-                product_totals[key]["total_amount"] += quantity * price_ht
-        
-        products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
-        
-        return {
-            "start_date": start_date,
-            "end_date": end_date,
-            "products": products_list,
-            "total_orders": len(orders),
-            "total_products_ordered": sum(p["total_quantity"] for p in products_list),
-            "total_amount": sum(p["total_amount"] for p in products_list)
-        }
+                
+                order_items = []
+                for item in order.get("items", []):
+                    product_name = item.get("product_name", "Produit inconnu")
+                    quantity = item.get("quantity", 0)
+                    price_ht = item.get("price_ht", 0) or 0
+                    order_items.append({
+                        "product_name": product_name,
+                        "quantity": quantity,
+                        "amount": quantity * price_ht
+                    })
+                    date_totals[date_key]["total_items"] += quantity
+                    date_totals[date_key]["total_amount"] += quantity * price_ht
+                
+                date_totals[date_key]["orders"].append({
+                    "order_id": order.get("order_id"),
+                    "supplier_name": order.get("supplier_name", "Inconnu"),
+                    "order_type": order.get("order_type", "command"),
+                    "items": order_items
+                })
+            
+            dates_list = sorted(date_totals.values(), key=lambda x: x["date"])
+            
+            return {
+                "start_date": start_date,
+                "end_date": end_date,
+                "view_mode": "date",
+                "dates": dates_list,
+                "total_orders": len(orders),
+                "total_products_ordered": sum(d["total_items"] for d in dates_list),
+                "total_amount": sum(d["total_amount"] for d in dates_list)
+            }
+        else:
+            # Mode par défaut: par produit
+            product_totals = {}
+            for order in orders:
+                supplier_name = order.get("supplier_name", "Inconnu")
+                for item in order.get("items", []):
+                    product_name = item.get("product_name", "Produit inconnu")
+                    product_type = item.get("product_type", order.get("order_type", "command"))
+                    quantity = item.get("quantity", 0)
+                    price_ht = item.get("price_ht", 0) or 0
+                    
+                    key = f"{supplier_name}::{product_name}::{product_type}"
+                    if key not in product_totals:
+                        product_totals[key] = {
+                            "product_name": product_name,
+                            "product_type": product_type,
+                            "supplier_name": supplier_name,
+                            "total_quantity": 0,
+                            "total_amount": 0
+                        }
+                    product_totals[key]["total_quantity"] += quantity
+                    product_totals[key]["total_amount"] += quantity * price_ht
+            
+            products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
+            
+            return {
+                "start_date": start_date,
+                "end_date": end_date,
+                "view_mode": "product",
+                "products": products_list,
+                "total_orders": len(orders),
+                "total_products_ordered": sum(p["total_quantity"] for p in products_list),
+                "total_amount": sum(p["total_amount"] for p in products_list)
+            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -8076,10 +8129,11 @@ async def get_monthly_report_pdf(
     end_date: str,
     supplier_id: Optional[str] = None,
     order_type: Optional[str] = None,
+    view_mode: Optional[str] = "product",  # product ou date
     token: Optional[str] = None,
     authorization: Optional[str] = Header(None)
 ):
-    """Générer un PDF du rapport mensuel"""
+    """Générer un PDF du rapport mensuel (par produit ou par date)"""
     current_user = None
     
     if authorization and authorization.startswith("Bearer "):
@@ -8124,29 +8178,16 @@ async def get_monthly_report_pdf(
     
     orders = await supplier_orders_collection.find(query).to_list(length=None)
     
-    product_totals = {}
-    for order in orders:
-        supplier_name = order.get("supplier_name", "Inconnu")
-        for item in order.get("items", []):
-            product_name = item.get("product_name", "Produit inconnu")
-            quantity = item.get("quantity", 0)
-            price_ht = item.get("price_ht", 0) or 0
-            key = f"{supplier_name}::{product_name}"
-            if key not in product_totals:
-                product_totals[key] = {"product_name": product_name, "supplier_name": supplier_name, "total_quantity": 0, "total_amount": 0}
-            product_totals[key]["total_quantity"] += quantity
-            product_totals[key]["total_amount"] += quantity * price_ht
-    
-    products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
-    
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
+    # Titre selon le mode
+    title_mode = "PAR DATE" if view_mode == "date" else "PAR PRODUIT"
     pdf.set_fill_color(26, 58, 92)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 12, "RAPPORT DES COMMANDES", fill=True, align="C")
+    pdf.cell(0, 12, f"RAPPORT DES COMMANDES {title_mode}", fill=True, align="C")
     pdf.ln(15)
     
     pdf.set_text_color(0, 0, 0)
@@ -8154,51 +8195,151 @@ async def get_monthly_report_pdf(
     pdf.cell(0, 8, restaurant.get("name", "Restaurant") if restaurant else "Restaurant", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 6, f"Periode: {start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}", ln=True)
-    pdf.cell(0, 6, f"Commandes: {len(orders)}", ln=True)
+    pdf.cell(0, 6, f"Nombre de commandes: {len(orders)}", ln=True)
     pdf.ln(10)
     
-    if products_list:
-        current_supplier = None
+    if view_mode == "date":
+        # Mode par date
+        date_totals = {}
+        for order in orders:
+            order_date = order.get("created_at")
+            if isinstance(order_date, datetime):
+                date_key = order_date.strftime("%Y-%m-%d")
+                date_display = order_date.strftime("%d/%m/%Y")
+            else:
+                date_key = str(order_date)[:10] if order_date else "Inconnue"
+                date_display = date_key
+            
+            if date_key not in date_totals:
+                date_totals[date_key] = {
+                    "date_display": date_display,
+                    "items": {},
+                    "total_qty": 0,
+                    "total_amount": 0
+                }
+            
+            for item in order.get("items", []):
+                product_name = item.get("product_name", "Produit inconnu")
+                quantity = item.get("quantity", 0)
+                price_ht = item.get("price_ht", 0) or 0
+                
+                if product_name not in date_totals[date_key]["items"]:
+                    date_totals[date_key]["items"][product_name] = {"qty": 0, "amount": 0}
+                date_totals[date_key]["items"][product_name]["qty"] += quantity
+                date_totals[date_key]["items"][product_name]["amount"] += quantity * price_ht
+                date_totals[date_key]["total_qty"] += quantity
+                date_totals[date_key]["total_amount"] += quantity * price_ht
+        
+        sorted_dates = sorted(date_totals.keys())
         grand_total_qty = 0
         grand_total_amount = 0
         
-        for product in products_list:
-            if product["supplier_name"] != current_supplier:
-                if current_supplier:
-                    pdf.ln(5)
-                current_supplier = product["supplier_name"]
-                pdf.set_fill_color(26, 58, 92)
-                pdf.set_text_color(255, 255, 255)
-                pdf.set_font("Helvetica", "B", 11)
-                pdf.cell(0, 8, f"Fournisseur: {current_supplier}", fill=True, ln=True)
-                pdf.set_fill_color(230, 230, 230)
-                pdf.set_text_color(0, 0, 0)
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(100, 7, "Produit", border=1, fill=True)
-                pdf.cell(30, 7, "Quantite", border=1, fill=True, align="C")
-                pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
+        for date_key in sorted_dates:
+            data = date_totals[date_key]
+            # En-tête de la date
+            pdf.set_fill_color(26, 58, 92)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(0, 8, f"Date: {data['date_display']}", fill=True, ln=True)
+            
+            # En-tête du tableau
+            pdf.set_fill_color(230, 230, 230)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(100, 7, "Produit", border=1, fill=True)
+            pdf.cell(30, 7, "Quantite", border=1, fill=True, align="C")
+            pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
+            pdf.ln()
+            
+            # Produits de cette date
+            pdf.set_font("Helvetica", "", 10)
+            for product_name, vals in sorted(data["items"].items()):
+                pdf.cell(100, 6, product_name[:50], border=1)
+                pdf.cell(30, 6, str(vals["qty"]), border=1, align="C")
+                pdf.cell(40, 6, f"{vals['amount']:.2f} EUR", border=1, align="R")
                 pdf.ln()
             
-            pdf.set_font("Helvetica", "", 10)
-            pdf.cell(100, 6, product["product_name"][:50], border=1)
-            pdf.cell(30, 6, str(product["total_quantity"]), border=1, align="C")
-            pdf.cell(40, 6, f"{product['total_amount']:.2f} EUR", border=1, align="R")
-            pdf.ln()
-            grand_total_qty += product["total_quantity"]
-            grand_total_amount += product["total_amount"]
+            # Sous-total du jour
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_fill_color(240, 248, 255)
+            pdf.cell(100, 6, f"Sous-total {data['date_display']}", border=1, fill=True)
+            pdf.cell(30, 6, str(data["total_qty"]), border=1, fill=True, align="C")
+            pdf.cell(40, 6, f"{data['total_amount']:.2f} EUR", border=1, fill=True, align="R")
+            pdf.ln(8)
+            
+            grand_total_qty += data["total_qty"]
+            grand_total_amount += data["total_amount"]
         
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.set_fill_color(200, 230, 200)
-        pdf.cell(100, 8, "TOTAL", border=1, fill=True)
-        pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
-        pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
+        # Total général
+        if sorted_dates:
+            pdf.ln(5)
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_fill_color(200, 230, 200)
+            pdf.cell(100, 8, "TOTAL GENERAL", border=1, fill=True)
+            pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
+            pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
+        else:
+            pdf.set_font("Helvetica", "I", 12)
+            pdf.cell(0, 10, "Aucune commande sur cette periode", ln=True, align="C")
     else:
-        pdf.set_font("Helvetica", "I", 12)
-        pdf.cell(0, 10, "Aucune commande sur cette periode", ln=True, align="C")
+        # Mode par produit (comportement actuel)
+        product_totals = {}
+        for order in orders:
+            supplier_name = order.get("supplier_name", "Inconnu")
+            for item in order.get("items", []):
+                product_name = item.get("product_name", "Produit inconnu")
+                quantity = item.get("quantity", 0)
+                price_ht = item.get("price_ht", 0) or 0
+                key = f"{supplier_name}::{product_name}"
+                if key not in product_totals:
+                    product_totals[key] = {"product_name": product_name, "supplier_name": supplier_name, "total_quantity": 0, "total_amount": 0}
+                product_totals[key]["total_quantity"] += quantity
+                product_totals[key]["total_amount"] += quantity * price_ht
+        
+        products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
+        
+        if products_list:
+            current_supplier = None
+            grand_total_qty = 0
+            grand_total_amount = 0
+            
+            for product in products_list:
+                if product["supplier_name"] != current_supplier:
+                    if current_supplier:
+                        pdf.ln(5)
+                    current_supplier = product["supplier_name"]
+                    pdf.set_fill_color(26, 58, 92)
+                    pdf.set_text_color(255, 255, 255)
+                    pdf.set_font("Helvetica", "B", 11)
+                    pdf.cell(0, 8, f"Fournisseur: {current_supplier}", fill=True, ln=True)
+                    pdf.set_fill_color(230, 230, 230)
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("Helvetica", "B", 10)
+                    pdf.cell(100, 7, "Produit", border=1, fill=True)
+                    pdf.cell(30, 7, "Quantite", border=1, fill=True, align="C")
+                    pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
+                    pdf.ln()
+                
+                pdf.set_font("Helvetica", "", 10)
+                pdf.cell(100, 6, product["product_name"][:50], border=1)
+                pdf.cell(30, 6, str(product["total_quantity"]), border=1, align="C")
+                pdf.cell(40, 6, f"{product['total_amount']:.2f} EUR", border=1, align="R")
+                pdf.ln()
+                grand_total_qty += product["total_quantity"]
+                grand_total_amount += product["total_amount"]
+            
+            pdf.ln(5)
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_fill_color(200, 230, 200)
+            pdf.cell(100, 8, "TOTAL", border=1, fill=True)
+            pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
+            pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
+        else:
+            pdf.set_font("Helvetica", "I", 12)
+            pdf.cell(0, 10, "Aucune commande sur cette periode", ln=True, align="C")
     
     pdf_content = pdf.output()
-    return Response(content=bytes(pdf_content), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="rapport.pdf"'})
+    return Response(content=bytes(pdf_content), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="rapport_{view_mode}.pdf"'})
 
 @api_router.get("/supplier-orders/{order_id}")
 async def get_supplier_order(
