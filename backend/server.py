@@ -8182,6 +8182,11 @@ async def get_monthly_report_pdf(
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
+    # Largeurs des colonnes pour un tableau aligné (total = 190mm)
+    col_product = 110
+    col_qty = 35
+    col_amount = 45
+    
     # Titre selon le mode
     title_mode = "PAR DATE" if view_mode == "date" else "PAR PRODUIT"
     pdf.set_fill_color(26, 58, 92)
@@ -8246,25 +8251,25 @@ async def get_monthly_report_pdf(
             pdf.set_fill_color(230, 230, 230)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(100, 7, "Produit", border=1, fill=True)
-            pdf.cell(30, 7, "Quantite", border=1, fill=True, align="C")
-            pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
+            pdf.cell(col_product, 7, "Produit", border=1, fill=True)
+            pdf.cell(col_qty, 7, "Quantite", border=1, fill=True, align="C")
+            pdf.cell(col_amount, 7, "Montant HT", border=1, fill=True, align="R")
             pdf.ln()
             
             # Produits de cette date
             pdf.set_font("Helvetica", "", 10)
             for product_name, vals in sorted(data["items"].items()):
-                pdf.cell(100, 6, product_name[:50], border=1)
-                pdf.cell(30, 6, str(vals["qty"]), border=1, align="C")
-                pdf.cell(40, 6, f"{vals['amount']:.2f} EUR", border=1, align="R")
+                pdf.cell(col_product, 6, product_name[:50], border=1)
+                pdf.cell(col_qty, 6, str(vals["qty"]), border=1, align="C")
+                pdf.cell(col_amount, 6, f"{vals['amount']:.2f} EUR", border=1, align="R")
                 pdf.ln()
             
             # Sous-total du jour
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_fill_color(240, 248, 255)
-            pdf.cell(100, 6, f"Sous-total {data['date_display']}", border=1, fill=True)
-            pdf.cell(30, 6, str(data["total_qty"]), border=1, fill=True, align="C")
-            pdf.cell(40, 6, f"{data['total_amount']:.2f} EUR", border=1, fill=True, align="R")
+            pdf.cell(col_product, 6, f"Sous-total {data['date_display']}", border=1, fill=True)
+            pdf.cell(col_qty, 6, str(data["total_qty"]), border=1, fill=True, align="C")
+            pdf.cell(col_amount, 6, f"{data['total_amount']:.2f} EUR", border=1, fill=True, align="R")
             pdf.ln(8)
             
             grand_total_qty += data["total_qty"]
@@ -8275,9 +8280,9 @@ async def get_monthly_report_pdf(
             pdf.ln(5)
             pdf.set_font("Helvetica", "B", 12)
             pdf.set_fill_color(200, 230, 200)
-            pdf.cell(100, 8, "TOTAL GENERAL", border=1, fill=True)
-            pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
-            pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
+            pdf.cell(col_product, 8, "TOTAL GENERAL", border=1, fill=True)
+            pdf.cell(col_qty, 8, str(grand_total_qty), border=1, fill=True, align="C")
+            pdf.cell(col_amount, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
         else:
             pdf.set_font("Helvetica", "I", 12)
             pdf.cell(0, 10, "Aucune commande sur cette periode", ln=True, align="C")
@@ -8315,15 +8320,15 @@ async def get_monthly_report_pdf(
                     pdf.set_fill_color(230, 230, 230)
                     pdf.set_text_color(0, 0, 0)
                     pdf.set_font("Helvetica", "B", 10)
-                    pdf.cell(100, 7, "Produit", border=1, fill=True)
-                    pdf.cell(30, 7, "Quantite", border=1, fill=True, align="C")
-                    pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
+                    pdf.cell(col_product, 7, "Produit", border=1, fill=True)
+                    pdf.cell(col_qty, 7, "Quantite", border=1, fill=True, align="C")
+                    pdf.cell(col_amount, 7, "Montant HT", border=1, fill=True, align="R")
                     pdf.ln()
                 
                 pdf.set_font("Helvetica", "", 10)
-                pdf.cell(100, 6, product["product_name"][:50], border=1)
-                pdf.cell(30, 6, str(product["total_quantity"]), border=1, align="C")
-                pdf.cell(40, 6, f"{product['total_amount']:.2f} EUR", border=1, align="R")
+                pdf.cell(col_product, 6, product["product_name"][:50], border=1)
+                pdf.cell(col_qty, 6, str(product["total_quantity"]), border=1, align="C")
+                pdf.cell(col_amount, 6, f"{product['total_amount']:.2f} EUR", border=1, align="R")
                 pdf.ln()
                 grand_total_qty += product["total_quantity"]
                 grand_total_amount += product["total_amount"]
@@ -8331,9 +8336,9 @@ async def get_monthly_report_pdf(
             pdf.ln(5)
             pdf.set_font("Helvetica", "B", 12)
             pdf.set_fill_color(200, 230, 200)
-            pdf.cell(100, 8, "TOTAL", border=1, fill=True)
-            pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
-            pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
+            pdf.cell(col_product, 8, "TOTAL", border=1, fill=True)
+            pdf.cell(col_qty, 8, str(grand_total_qty), border=1, fill=True, align="C")
+            pdf.cell(col_amount, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
         else:
             pdf.set_font("Helvetica", "I", 12)
             pdf.cell(0, 10, "Aucune commande sur cette periode", ln=True, align="C")
