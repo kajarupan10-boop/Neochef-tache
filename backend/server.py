@@ -8005,6 +8005,201 @@ async def list_supplier_orders(
     
     return orders
 
+# ==================== RAPPORT MENSUEL COMMANDES FOURNISSEURS ====================
+
+@api_router.get("/supplier-orders/monthly-report")
+async def get_monthly_report(
+    start_date: str,  # Format: YYYY-MM-DD
+    end_date: str,    # Format: YYYY-MM-DD
+    supplier_id: Optional[str] = None,
+    order_type: Optional[str] = None,  # command, consigne, reclamation
+    current_user: dict = Depends(get_current_user)
+):
+    """Rapport mensuel des commandes par produit"""
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        
+        query = {
+            "restaurant_id": current_user["restaurant_id"],
+            "created_at": {"$gte": start, "$lte": end}
+        }
+        
+        if supplier_id and supplier_id != 'all':
+            query["supplier_id"] = supplier_id
+        
+        if order_type and order_type != 'all':
+            if order_type == 'command':
+                query["order_type"] = {"$nin": ["consigne", "reclamation"]}
+            else:
+                query["order_type"] = order_type
+        
+        orders = await supplier_orders_collection.find(query).to_list(length=None)
+        
+        product_totals = {}
+        for order in orders:
+            supplier_name = order.get("supplier_name", "Inconnu")
+            for item in order.get("items", []):
+                product_name = item.get("product_name", "Produit inconnu")
+                product_type = item.get("product_type", order.get("order_type", "command"))
+                quantity = item.get("quantity", 0)
+                price_ht = item.get("price_ht", 0) or 0
+                
+                key = f"{supplier_name}::{product_name}::{product_type}"
+                if key not in product_totals:
+                    product_totals[key] = {
+                        "product_name": product_name,
+                        "product_type": product_type,
+                        "supplier_name": supplier_name,
+                        "total_quantity": 0,
+                        "total_amount": 0
+                    }
+                product_totals[key]["total_quantity"] += quantity
+                product_totals[key]["total_amount"] += quantity * price_ht
+        
+        products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
+        
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "products": products_list,
+            "total_orders": len(orders),
+            "total_products_ordered": sum(p["total_quantity"] for p in products_list),
+            "total_amount": sum(p["total_amount"] for p in products_list)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/supplier-orders/monthly-report/pdf")
+async def get_monthly_report_pdf(
+    start_date: str,
+    end_date: str,
+    supplier_id: Optional[str] = None,
+    order_type: Optional[str] = None,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
+    """Générer un PDF du rapport mensuel"""
+    current_user = None
+    
+    if authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.replace("Bearer ", "")
+        session_doc = await sessions_collection.find_one({"session_token": auth_token}, {"_id": 0})
+        if session_doc:
+            expires_at = session_doc["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at >= datetime.now(timezone.utc):
+                current_user = await users_collection.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
+    
+    if current_user is None and token:
+        session_doc = await sessions_collection.find_one({"session_token": token}, {"_id": 0})
+        if session_doc:
+            expires_at = session_doc["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at >= datetime.now(timezone.utc):
+                current_user = await users_collection.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
+    
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+    
+    restaurant = await restaurants_collection.find_one({"restaurant_id": current_user["restaurant_id"]}, {"_id": 0})
+    
+    query = {"restaurant_id": current_user["restaurant_id"], "created_at": {"$gte": start, "$lte": end}}
+    if supplier_id and supplier_id != 'all':
+        query["supplier_id"] = supplier_id
+    if order_type and order_type != 'all':
+        if order_type == 'command':
+            query["order_type"] = {"$nin": ["consigne", "reclamation"]}
+        else:
+            query["order_type"] = order_type
+    
+    orders = await supplier_orders_collection.find(query).to_list(length=None)
+    
+    product_totals = {}
+    for order in orders:
+        supplier_name = order.get("supplier_name", "Inconnu")
+        for item in order.get("items", []):
+            product_name = item.get("product_name", "Produit inconnu")
+            quantity = item.get("quantity", 0)
+            price_ht = item.get("price_ht", 0) or 0
+            key = f"{supplier_name}::{product_name}"
+            if key not in product_totals:
+                product_totals[key] = {"product_name": product_name, "supplier_name": supplier_name, "total_quantity": 0, "total_amount": 0}
+            product_totals[key]["total_quantity"] += quantity
+            product_totals[key]["total_amount"] += quantity * price_ht
+    
+    products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
+    
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    pdf.set_fill_color(26, 58, 92)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 12, "RAPPORT DES COMMANDES", fill=True, align="C")
+    pdf.ln(15)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, restaurant.get("name", "Restaurant") if restaurant else "Restaurant", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 6, f"Periode: {start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}", ln=True)
+    pdf.cell(0, 6, f"Commandes: {len(orders)}", ln=True)
+    pdf.ln(10)
+    
+    if products_list:
+        current_supplier = None
+        grand_total_qty = 0
+        grand_total_amount = 0
+        
+        for product in products_list:
+            if product["supplier_name"] != current_supplier:
+                if current_supplier:
+                    pdf.ln(5)
+                current_supplier = product["supplier_name"]
+                pdf.set_fill_color(26, 58, 92)
+                pdf.set_text_color(255, 255, 255)
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(0, 8, f"Fournisseur: {current_supplier}", fill=True, ln=True)
+                pdf.set_fill_color(230, 230, 230)
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(100, 7, "Produit", border=1, fill=True)
+                pdf.cell(30, 7, "Quantite", border=1, fill=True, align="C")
+                pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
+                pdf.ln()
+            
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(100, 6, product["product_name"][:50], border=1)
+            pdf.cell(30, 6, str(product["total_quantity"]), border=1, align="C")
+            pdf.cell(40, 6, f"{product['total_amount']:.2f} EUR", border=1, align="R")
+            pdf.ln()
+            grand_total_qty += product["total_quantity"]
+            grand_total_amount += product["total_amount"]
+        
+        pdf.ln(5)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_fill_color(200, 230, 200)
+        pdf.cell(100, 8, "TOTAL", border=1, fill=True)
+        pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
+        pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
+    else:
+        pdf.set_font("Helvetica", "I", 12)
+        pdf.cell(0, 10, "Aucune commande sur cette periode", ln=True, align="C")
+    
+    pdf_content = pdf.output()
+    return Response(content=bytes(pdf_content), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="rapport.pdf"'})
+
 @api_router.get("/supplier-orders/{order_id}")
 async def get_supplier_order(
     order_id: str,
@@ -8416,281 +8611,6 @@ async def generate_order_pdf(
     else:
         file_prefix = "commande"
     filename = f"{file_prefix}_{supplier_name_clean}_{date_str.replace('/', '-')}.pdf"
-    
-    return Response(
-        content=bytes(pdf_content),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-# ==================== RAPPORT MENSUEL COMMANDES FOURNISSEURS ====================
-
-@api_router.get("/supplier-orders/monthly-report")
-async def get_monthly_report(
-    start_date: str,  # Format: YYYY-MM-DD
-    end_date: str,    # Format: YYYY-MM-DD
-    supplier_id: Optional[str] = None,
-    order_type: Optional[str] = None,  # command, consigne, reclamation
-    current_user: dict = Depends(get_current_user)
-):
-    """Rapport mensuel des commandes par produit"""
-    try:
-        # Parser les dates
-        start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
-        
-        # Construire le filtre MongoDB
-        query = {
-            "restaurant_id": current_user["restaurant_id"],
-            "created_at": {"$gte": start, "$lte": end}
-        }
-        
-        # Filtre par fournisseur
-        if supplier_id and supplier_id != 'all':
-            query["supplier_id"] = supplier_id
-        
-        # Filtre par type de commande
-        if order_type and order_type != 'all':
-            if order_type == 'command':
-                query["order_type"] = {"$nin": ["consigne", "reclamation"]}
-            else:
-                query["order_type"] = order_type
-        
-        # Récupérer toutes les commandes dans la période
-        orders = await supplier_orders_collection.find(query).to_list(length=None)
-        
-        # Agréger par produit
-        product_totals = {}
-        supplier_totals = {}
-        
-        for order in orders:
-            supplier_name = order.get("supplier_name", "Inconnu")
-            current_order_type = order.get("order_type", "command")
-            
-            for item in order.get("items", []):
-                product_name = item.get("product_name", "Produit inconnu")
-                product_type = item.get("product_type", current_order_type)
-                quantity = item.get("quantity", 0)
-                price_ht = item.get("price_ht", 0) or 0
-                
-                # Clé unique pour le produit
-                key = f"{supplier_name}::{product_name}::{product_type}"
-                
-                if key not in product_totals:
-                    product_totals[key] = {
-                        "product_name": product_name,
-                        "product_type": product_type,
-                        "supplier_name": supplier_name,
-                        "total_quantity": 0,
-                        "total_amount": 0,
-                        "order_count": 0
-                    }
-                
-                product_totals[key]["total_quantity"] += quantity
-                product_totals[key]["total_amount"] += quantity * price_ht
-                product_totals[key]["order_count"] += 1
-                
-                # Totaux par fournisseur
-                if supplier_name not in supplier_totals:
-                    supplier_totals[supplier_name] = {
-                        "total_quantity": 0,
-                        "total_amount": 0,
-                        "order_count": 0
-                    }
-                supplier_totals[supplier_name]["total_quantity"] += quantity
-                supplier_totals[supplier_name]["total_amount"] += quantity * price_ht
-        
-        # Convertir en liste triée par fournisseur puis produit
-        products_list = sorted(
-            product_totals.values(), 
-            key=lambda x: (x["supplier_name"], x["product_name"])
-        )
-        
-        return {
-            "start_date": start_date,
-            "end_date": end_date,
-            "products": products_list,
-            "by_supplier": supplier_totals,
-            "total_orders": len(orders),
-            "total_products_ordered": sum(p["total_quantity"] for p in products_list),
-            "total_amount": sum(p["total_amount"] for p in products_list)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/supplier-orders/monthly-report/pdf")
-async def get_monthly_report_pdf(
-    start_date: str,
-    end_date: str,
-    supplier_id: Optional[str] = None,
-    order_type: Optional[str] = None,
-    token: Optional[str] = None,
-    authorization: Optional[str] = Header(None)
-):
-    """Générer un PDF du rapport mensuel par produit"""
-    # Authentification
-    current_user = None
-    
-    if authorization and authorization.startswith("Bearer "):
-        auth_token = authorization.replace("Bearer ", "")
-        session_doc = await sessions_collection.find_one({"session_token": auth_token}, {"_id": 0})
-        if session_doc:
-            expires_at = session_doc["expires_at"]
-            if isinstance(expires_at, str):
-                expires_at = datetime.fromisoformat(expires_at)
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if expires_at >= datetime.now(timezone.utc):
-                current_user = await users_collection.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
-    
-    if current_user is None and token:
-        session_doc = await sessions_collection.find_one({"session_token": token}, {"_id": 0})
-        if session_doc:
-            expires_at = session_doc["expires_at"]
-            if isinstance(expires_at, str):
-                expires_at = datetime.fromisoformat(expires_at)
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if expires_at >= datetime.now(timezone.utc):
-                current_user = await users_collection.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
-    
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    
-    # Parser les dates
-    start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
-    
-    # Récupérer le restaurant
-    restaurant = await restaurants_collection.find_one(
-        {"restaurant_id": current_user["restaurant_id"]},
-        {"_id": 0}
-    )
-    
-    # Construire le filtre MongoDB
-    query = {
-        "restaurant_id": current_user["restaurant_id"],
-        "created_at": {"$gte": start, "$lte": end}
-    }
-    
-    if supplier_id and supplier_id != 'all':
-        query["supplier_id"] = supplier_id
-    
-    if order_type and order_type != 'all':
-        if order_type == 'command':
-            query["order_type"] = {"$nin": ["consigne", "reclamation"]}
-        else:
-            query["order_type"] = order_type
-    
-    # Récupérer les commandes
-    orders = await supplier_orders_collection.find(query).to_list(length=None)
-    
-    # Agréger par produit
-    product_totals = {}
-    for order in orders:
-        supplier_name = order.get("supplier_name", "Inconnu")
-        for item in order.get("items", []):
-            product_name = item.get("product_name", "Produit inconnu")
-            product_type = item.get("product_type", "product")
-            quantity = item.get("quantity", 0)
-            price_ht = item.get("price_ht", 0) or 0
-            
-            key = f"{supplier_name}::{product_name}::{product_type}"
-            if key not in product_totals:
-                product_totals[key] = {
-                    "product_name": product_name,
-                    "product_type": product_type,
-                    "supplier_name": supplier_name,
-                    "total_quantity": 0,
-                    "total_amount": 0
-                }
-            product_totals[key]["total_quantity"] += quantity
-            product_totals[key]["total_amount"] += quantity * price_ht
-    
-    products_list = sorted(product_totals.values(), key=lambda x: (x["supplier_name"], x["product_name"]))
-    
-    # Créer le PDF
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    
-    RAL_5008 = (26, 58, 92)
-    
-    # En-tête
-    pdf.set_fill_color(*RAL_5008)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 12, "RAPPORT MENSUEL DES COMMANDES", fill=True, align="C")
-    pdf.ln(15)
-    
-    # Infos restaurant et période
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, restaurant.get("name", "Restaurant") if restaurant else "Restaurant", ln=True)
-    pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 6, f"Période: du {start.strftime('%d/%m/%Y')} au {end.strftime('%d/%m/%Y')}", ln=True)
-    pdf.cell(0, 6, f"Nombre de commandes: {len(orders)}", ln=True)
-    pdf.ln(10)
-    
-    if products_list:
-        # Tableau par fournisseur
-        current_supplier = None
-        grand_total_qty = 0
-        grand_total_amount = 0
-        
-        for product in products_list:
-            # Nouveau fournisseur
-            if product["supplier_name"] != current_supplier:
-                if current_supplier is not None:
-                    pdf.ln(5)
-                
-                current_supplier = product["supplier_name"]
-                pdf.set_fill_color(*RAL_5008)
-                pdf.set_text_color(255, 255, 255)
-                pdf.set_font("Helvetica", "B", 11)
-                pdf.cell(0, 8, f"Fournisseur: {current_supplier}", fill=True, ln=True)
-                
-                # En-têtes colonnes
-                pdf.set_fill_color(230, 230, 230)
-                pdf.set_text_color(0, 0, 0)
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(90, 7, "Produit", border=1, fill=True)
-                pdf.cell(30, 7, "Type", border=1, fill=True, align="C")
-                pdf.cell(30, 7, "Quantité", border=1, fill=True, align="C")
-                pdf.cell(40, 7, "Montant HT", border=1, fill=True, align="R")
-                pdf.ln()
-            
-            # Ligne produit
-            pdf.set_font("Helvetica", "", 10)
-            type_label = "Consigne" if product["product_type"] == "consigne" else "Produit"
-            pdf.cell(90, 6, product["product_name"][:45], border=1)
-            pdf.cell(30, 6, type_label, border=1, align="C")
-            pdf.cell(30, 6, str(product["total_quantity"]), border=1, align="C")
-            pdf.cell(40, 6, f"{product['total_amount']:.2f} EUR", border=1, align="R")
-            pdf.ln()
-            
-            grand_total_qty += product["total_quantity"]
-            grand_total_amount += product["total_amount"]
-        
-        # Total général
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.set_fill_color(200, 230, 200)
-        pdf.cell(120, 8, "TOTAL GÉNÉRAL", border=1, fill=True)
-        pdf.cell(30, 8, str(grand_total_qty), border=1, fill=True, align="C")
-        pdf.cell(40, 8, f"{grand_total_amount:.2f} EUR", border=1, fill=True, align="R")
-    else:
-        pdf.set_font("Helvetica", "I", 12)
-        pdf.cell(0, 10, "Aucune commande sur cette période", ln=True, align="C")
-    
-    # Pied de page
-    pdf.ln(15)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(120, 120, 120)
-    pdf.cell(0, 5, f"Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}", ln=True, align="R")
-    
-    pdf_content = pdf.output()
-    filename = f"rapport_mensuel_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.pdf"
     
     return Response(
         content=bytes(pdf_content),
