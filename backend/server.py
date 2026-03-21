@@ -8429,6 +8429,8 @@ async def generate_order_pdf(
 async def get_monthly_report(
     start_date: str,  # Format: YYYY-MM-DD
     end_date: str,    # Format: YYYY-MM-DD
+    supplier_id: Optional[str] = None,
+    order_type: Optional[str] = None,  # command, consigne, reclamation
     current_user: dict = Depends(get_current_user)
 ):
     """Rapport mensuel des commandes par produit"""
@@ -8437,12 +8439,25 @@ async def get_monthly_report(
         start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
         
-        # Récupérer toutes les commandes dans la période
-        orders = await supplier_orders_collection.find({
+        # Construire le filtre MongoDB
+        query = {
             "restaurant_id": current_user["restaurant_id"],
-            "created_at": {"$gte": start, "$lte": end},
-            "order_type": {"$ne": "reclamation"}  # Exclure les réclamations
-        }).to_list(length=None)
+            "created_at": {"$gte": start, "$lte": end}
+        }
+        
+        # Filtre par fournisseur
+        if supplier_id and supplier_id != 'all':
+            query["supplier_id"] = supplier_id
+        
+        # Filtre par type de commande
+        if order_type and order_type != 'all':
+            if order_type == 'command':
+                query["order_type"] = {"$nin": ["consigne", "reclamation"]}
+            else:
+                query["order_type"] = order_type
+        
+        # Récupérer toutes les commandes dans la période
+        orders = await supplier_orders_collection.find(query).to_list(length=None)
         
         # Agréger par produit
         product_totals = {}
@@ -8450,10 +8465,11 @@ async def get_monthly_report(
         
         for order in orders:
             supplier_name = order.get("supplier_name", "Inconnu")
+            current_order_type = order.get("order_type", "command")
             
             for item in order.get("items", []):
                 product_name = item.get("product_name", "Produit inconnu")
-                product_type = item.get("product_type", "product")
+                product_type = item.get("product_type", current_order_type)
                 quantity = item.get("quantity", 0)
                 price_ht = item.get("price_ht", 0) or 0
                 
@@ -8506,6 +8522,8 @@ async def get_monthly_report(
 async def get_monthly_report_pdf(
     start_date: str,
     end_date: str,
+    supplier_id: Optional[str] = None,
+    order_type: Optional[str] = None,
     token: Optional[str] = None,
     authorization: Optional[str] = Header(None)
 ):
@@ -8549,12 +8567,23 @@ async def get_monthly_report_pdf(
         {"_id": 0}
     )
     
-    # Récupérer les commandes
-    orders = await supplier_orders_collection.find({
+    # Construire le filtre MongoDB
+    query = {
         "restaurant_id": current_user["restaurant_id"],
-        "created_at": {"$gte": start, "$lte": end},
-        "order_type": {"$ne": "reclamation"}
-    }).to_list(length=None)
+        "created_at": {"$gte": start, "$lte": end}
+    }
+    
+    if supplier_id and supplier_id != 'all':
+        query["supplier_id"] = supplier_id
+    
+    if order_type and order_type != 'all':
+        if order_type == 'command':
+            query["order_type"] = {"$nin": ["consigne", "reclamation"]}
+        else:
+            query["order_type"] = order_type
+    
+    # Récupérer les commandes
+    orders = await supplier_orders_collection.find(query).to_list(length=None)
     
     # Agréger par produit
     product_totals = {}
