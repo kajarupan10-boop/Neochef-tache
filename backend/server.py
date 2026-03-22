@@ -7862,8 +7862,15 @@ async def update_supplier_product(
     current_user: dict = Depends(get_current_user)
 ):
     """Mettre à jour un produit"""
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # Vérifier les permissions - admin ou permission preparation_commande avec modifier
+    has_permission = current_user["role"] == "admin"
+    if not has_permission:
+        detailed_permissions = current_user.get("detailed_permissions", {})
+        prep_perms = detailed_permissions.get("preparation_commande", {})
+        has_permission = prep_perms.get("actif") and prep_perms.get("modifier")
+    
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Permission denied")
     
     update_data = {k: v for k, v in update_request.dict().items() if v is not None}
     
