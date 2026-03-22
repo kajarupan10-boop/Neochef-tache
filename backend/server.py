@@ -8044,6 +8044,35 @@ async def get_monthly_report(
         
         orders = await supplier_orders_collection.find(query).to_list(length=None)
         
+        # Charger tous les produits pour récupérer les prix manquants
+        all_products = await supplier_products_collection.find(
+            {"restaurant_id": current_user["restaurant_id"]},
+            {"_id": 0, "product_id": 1, "name": 1, "price_ht": 1}
+        ).to_list(length=None)
+        
+        # Créer un dictionnaire de prix par product_id et par nom
+        product_prices = {}
+        for p in all_products:
+            if p.get("product_id"):
+                product_prices[p["product_id"]] = p.get("price_ht", 0) or 0
+            if p.get("name"):
+                product_prices[p["name"].lower()] = p.get("price_ht", 0) or 0
+        
+        def get_item_price(item):
+            """Récupère le prix d'un item, en cherchant dans les produits si nécessaire"""
+            price = item.get("price_ht", 0) or 0
+            if price == 0:
+                # Chercher par product_id
+                product_id = item.get("product_id")
+                if product_id and product_id in product_prices:
+                    price = product_prices[product_id]
+                # Sinon chercher par nom
+                if price == 0:
+                    product_name = item.get("product_name", "").lower()
+                    if product_name in product_prices:
+                        price = product_prices[product_name]
+            return price
+        
         if view_mode == "date":
             # Grouper par date
             date_totals = {}
@@ -8066,7 +8095,7 @@ async def get_monthly_report(
                 for item in order.get("items", []):
                     product_name = item.get("product_name", "Produit inconnu")
                     quantity = item.get("quantity", 0)
-                    price_ht = item.get("price_ht", 0) or 0
+                    price_ht = get_item_price(item)
                     order_items.append({
                         "product_name": product_name,
                         "quantity": quantity,
@@ -8102,7 +8131,7 @@ async def get_monthly_report(
                     product_name = item.get("product_name", "Produit inconnu")
                     product_type = item.get("product_type", order.get("order_type", "command"))
                     quantity = item.get("quantity", 0)
-                    price_ht = item.get("price_ht", 0) or 0
+                    price_ht = get_item_price(item)
                     
                     key = f"{supplier_name}::{product_name}::{product_type}"
                     if key not in product_totals:
@@ -8185,6 +8214,33 @@ async def get_monthly_report_pdf(
     
     orders = await supplier_orders_collection.find(query).to_list(length=None)
     
+    # Charger tous les produits pour récupérer les prix manquants
+    all_products = await supplier_products_collection.find(
+        {"restaurant_id": current_user["restaurant_id"]},
+        {"_id": 0, "product_id": 1, "name": 1, "price_ht": 1}
+    ).to_list(length=None)
+    
+    # Créer un dictionnaire de prix par product_id et par nom
+    product_prices = {}
+    for p in all_products:
+        if p.get("product_id"):
+            product_prices[p["product_id"]] = p.get("price_ht", 0) or 0
+        if p.get("name"):
+            product_prices[p["name"].lower()] = p.get("price_ht", 0) or 0
+    
+    def get_item_price(item):
+        """Récupère le prix d'un item, en cherchant dans les produits si nécessaire"""
+        price = item.get("price_ht", 0) or 0
+        if price == 0:
+            product_id = item.get("product_id")
+            if product_id and product_id in product_prices:
+                price = product_prices[product_id]
+            if price == 0:
+                product_name = item.get("product_name", "").lower()
+                if product_name in product_prices:
+                    price = product_prices[product_name]
+        return price
+    
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -8233,7 +8289,7 @@ async def get_monthly_report_pdf(
             for item in order.get("items", []):
                 product_name = item.get("product_name", "Produit inconnu")
                 quantity = item.get("quantity", 0)
-                price_ht = item.get("price_ht", 0) or 0
+                price_ht = get_item_price(item)
                 
                 if product_name not in date_totals[date_key]["items"]:
                     date_totals[date_key]["items"][product_name] = {"qty": 0, "amount": 0}
@@ -8301,7 +8357,7 @@ async def get_monthly_report_pdf(
             for item in order.get("items", []):
                 product_name = item.get("product_name", "Produit inconnu")
                 quantity = item.get("quantity", 0)
-                price_ht = item.get("price_ht", 0) or 0
+                price_ht = get_item_price(item)
                 key = f"{supplier_name}::{product_name}"
                 if key not in product_totals:
                     product_totals[key] = {"product_name": product_name, "supplier_name": supplier_name, "total_quantity": 0, "total_amount": 0}
