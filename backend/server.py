@@ -8729,7 +8729,7 @@ async def generate_order_pdf(
         pdf.ln()
     else:
         # Vérifier si les consignes ont des prix
-        has_prices = any(item.get("price_ht", 0) > 0 for item in order.get("items", []))
+        has_prices = any((item.get("price_ht") or 0) > 0 for item in order.get("items", []))
         
         if is_only_consignes and has_prices:
             # Consignes avec prix - afficher comme réclamation (avec tableau des prix)
