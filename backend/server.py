@@ -10023,11 +10023,16 @@ async def export_fiche_excel(
     include_prices: bool = Body(default=True),
     current_user: dict = Depends(get_current_user)
 ):
-    """Exporter les fiches techniques sélectionnées en Excel (CSV)
-    - AVEC prix: Produit, Section, Catégorie, Ingrédient, Qte utilisée, Prix achat, Coût, Prix revient, etc.
-    - SANS prix: Produit, Ingrédient, Quantité uniquement + Notes
-    Note: La colonne "quantité achetée" a été retirée comme demandé
+    """Exporter les fiches techniques sélectionnées en Excel (XLSX)
+    Format propre:
+    - Un en-tête pour chaque produit
+    - Un tableau d'ingrédients avec Quantité, Unité, Prix (si include_prices)
+    - Un total à la fin de chaque produit
     """
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    
     # Récupérer les produits
     products = await fiche_technique_products_collection.find({
         "product_id": {"$in": product_ids},
@@ -10037,28 +10042,28 @@ async def export_fiche_excel(
     if not products:
         raise HTTPException(status_code=404, detail="No products found")
     
-    # Créer le CSV
-    import csv
-    from io import StringIO
+    # Créer le workbook Excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Fiches Techniques"
     
-    output = StringIO()
-    writer = csv.writer(output, delimiter=';')
+    # Styles
+    header_font = Font(bold=True, size=14, color="FFFFFF")
+    header_fill = PatternFill(start_color="26252D", end_color="26252D", fill_type="solid")
+    subheader_font = Font(bold=True, size=11)
+    subheader_fill = PatternFill(start_color="E8E8E8", end_color="E8E8E8", fill_type="solid")
+    total_fill = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
     
-    # En-têtes selon include_prices (sans "quantité achetée")
-    if include_prices:
-        writer.writerow([
-            "Produit", "Section", "Categorie", 
-            "Ingredient", "Qte utilisee", "Unite",
-            "Prix achat", "Cout ingredient", 
-            "Prix revient total", "Multiplicateur", "Prix vente", "Notes"
-        ])
-    else:
-        # Sans prix: seulement Produit, Ingrédient, Quantité et Notes
-        writer.writerow([
-            "Produit", "Ingredient", "Quantite", "Notes"
-        ])
+    current_row = 1
     
     for product in products:
+        # Récupérer la section
         section = await fiche_technique_sections_collection.find_one(
             {"section_id": product.get("section_id")},
             {"_id": 0}
@@ -10067,65 +10072,128 @@ async def export_fiche_excel(
         category = section.get("category", "") if section else ""
         notes = product.get("notes", "") or ""
         
+        # En-tête du produit (ligne avec fond sombre)
+        product_name = product.get("name", "Produit")
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5 if include_prices else 3)
+        cell = ws.cell(row=current_row, column=1, value=f"📦 {product_name}")
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[current_row].height = 25
+        current_row += 1
+        
+        # Sous-en-tête avec section/catégorie si include_prices
+        if include_prices and section_name:
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+            cell = ws.cell(row=current_row, column=1, value=f"Section: {section_name} | Catégorie: {'Bar' if category == 'bar' else 'Cuisine'}")
+            cell.font = Font(italic=True, size=10)
+            cell.alignment = Alignment(horizontal='center')
+            current_row += 1
+        
+        # En-têtes du tableau d'ingrédients
+        if include_prices:
+            headers = ["Ingrédient", "Quantité", "Unité", "Prix d'achat", "Coût"]
+        else:
+            headers = ["Ingrédient", "Quantité", "Unité"]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=current_row, column=col, value=header)
+            cell.font = subheader_font
+            cell.fill = subheader_fill
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center')
+        current_row += 1
+        
+        # Liste des ingrédients
         ingredients = product.get("ingredients", [])
+        total_cost = 0
+        
         if ingredients:
-            for i, ing in enumerate(ingredients):
+            for ing in ingredients:
+                ing_name = ing.get("name", "")
+                quantity = ing.get("quantity_used", "")
+                unit = ing.get("unit_used", "")
+                
+                ws.cell(row=current_row, column=1, value=ing_name).border = thin_border
+                ws.cell(row=current_row, column=2, value=quantity).border = thin_border
+                ws.cell(row=current_row, column=3, value=unit).border = thin_border
+                
                 if include_prices:
-                    writer.writerow([
-                        product.get("name", ""),
-                        section_name,
-                        "Bar" if category == "bar" else "Cuisine",
-                        ing.get("name", ""),
-                        ing.get("quantity_used", ""),
-                        ing.get("unit_used", ""),
-                        ing.get("purchase_price", ""),
-                        f"{ing.get('cost', 0):.2f}",
-                        f"{product.get('total_cost', 0):.2f}" if i == 0 else "",
-                        product.get("multiplier", "") if i == 0 else "",
-                        f"{product.get('selling_price', 0):.2f}" if product.get("selling_price") and i == 0 else "",
-                        notes if i == 0 else ""  # Notes seulement sur la première ligne
-                    ])
-                else:
-                    # Sans prix: format simplifié
-                    writer.writerow([
-                        product.get("name", ""),
-                        ing.get("name", ""),
-                        f"{ing.get('quantity_used', '')} {ing.get('unit_used', '')}",
-                        notes if i == 0 else ""  # Notes seulement sur la première ligne
-                    ])
+                    purchase_price = ing.get("purchase_price", 0) or 0
+                    cost = ing.get("cost", 0) or 0
+                    total_cost += cost
+                    
+                    price_cell = ws.cell(row=current_row, column=4, value=f"{purchase_price:.2f} €" if purchase_price else "")
+                    price_cell.border = thin_border
+                    price_cell.alignment = Alignment(horizontal='right')
+                    
+                    cost_cell = ws.cell(row=current_row, column=5, value=f"{cost:.2f} €" if cost else "")
+                    cost_cell.border = thin_border
+                    cost_cell.alignment = Alignment(horizontal='right')
+                
+                current_row += 1
         else:
             # Produit sans ingrédients
+            ws.cell(row=current_row, column=1, value="(Aucun ingrédient)").border = thin_border
+            ws.cell(row=current_row, column=2, value="").border = thin_border
+            ws.cell(row=current_row, column=3, value="").border = thin_border
             if include_prices:
-                writer.writerow([
-                    product.get("name", ""),
-                    section_name,
-                    "Bar" if category == "bar" else "Cuisine",
-                    "", "", "", "", "",
-                    f"{product.get('total_cost', 0):.2f}",
-                    product.get("multiplier", ""),
-                    f"{product.get('selling_price', 0):.2f}" if product.get("selling_price") else "",
-                    notes
-                ])
-            else:
-                writer.writerow([
-                    product.get("name", ""),
-                    "", "", notes
-                ])
+                ws.cell(row=current_row, column=4, value="").border = thin_border
+                ws.cell(row=current_row, column=5, value="").border = thin_border
+            current_row += 1
+        
+        # Ligne de total si include_prices
+        if include_prices:
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+            total_label = ws.cell(row=current_row, column=1, value="PRIX DE REVIENT TOTAL")
+            total_label.font = Font(bold=True)
+            total_label.fill = total_fill
+            total_label.border = thin_border
+            total_label.alignment = Alignment(horizontal='right')
+            
+            stored_total = product.get("total_cost", 0) or total_cost
+            total_value = ws.cell(row=current_row, column=5, value=f"{stored_total:.2f} €")
+            total_value.font = Font(bold=True)
+            total_value.fill = total_fill
+            total_value.border = thin_border
+            total_value.alignment = Alignment(horizontal='right')
+            current_row += 1
+            
+            # Prix de vente et marge si disponibles
+            selling_price = product.get("selling_price")
+            if selling_price:
+                ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+                ws.cell(row=current_row, column=1, value="Prix de vente").alignment = Alignment(horizontal='right')
+                ws.cell(row=current_row, column=5, value=f"{selling_price:.2f} €").alignment = Alignment(horizontal='right')
+                current_row += 1
+        
+        # Notes si présentes
+        if notes:
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5 if include_prices else 3)
+            note_cell = ws.cell(row=current_row, column=1, value=f"Notes: {notes}")
+            note_cell.font = Font(italic=True, size=9)
+            current_row += 1
+        
+        # Ligne vide entre les produits
+        current_row += 1
     
-    csv_content = output.getvalue()
+    # Ajuster la largeur des colonnes
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 10
+    if include_prices:
+        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['E'].width = 12
+    
+    # Sauvegarder dans un buffer
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
     
     return Response(
-        content=csv_content.encode('utf-8-sig'),  # UTF-8 with BOM for Excel
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=fiches_techniques.csv"}
-    )
-    
-    csv_content = output.getvalue()
-    
-    return Response(
-        content=csv_content.encode('utf-8-sig'),  # UTF-8 with BOM for Excel
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=fiches_techniques.csv"}
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=fiches_techniques.xlsx"}
     )
 
 @api_router.post("/fiche-products/import-from-pdf")

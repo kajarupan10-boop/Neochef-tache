@@ -14,7 +14,7 @@ import os
 # Use the public URL from environment
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://neochef-bugfix-1.preview.emergentagent.com"
+    BASE_URL = "https://ios-pdf-repair.preview.emergentagent.com"
 
 # Test credentials
 STAFF_EMAIL = "tharshikan@orange.fr"
