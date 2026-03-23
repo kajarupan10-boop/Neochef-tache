@@ -16944,8 +16944,43 @@ def get_default_section_color(name: str) -> str:
     return '#3498db'  # Bleu par défaut
 
 @api_router.get("/events/{event_id}/menu/export-pdf")
-async def export_event_menu_pdf(event_id: str, current_user: dict = Depends(get_current_user)):
+async def export_event_menu_pdf(
+    event_id: str,
+    token: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
     """Exporter le menu d'un événement en PDF avec design graphique élégant et centré"""
+    # Authentification via header ou query parameter
+    current_user = None
+    
+    # Essayer d'abord le header Authorization
+    if authorization and authorization.startswith("Bearer "):
+        auth_token = authorization.replace("Bearer ", "")
+        session_doc = await sessions_collection.find_one({"session_token": auth_token}, {"_id": 0})
+        if session_doc:
+            expires_at = session_doc["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at >= datetime.now(timezone.utc):
+                current_user = await users_collection.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
+    
+    # Sinon, essayer le query parameter
+    if current_user is None and token:
+        session_doc = await sessions_collection.find_one({"session_token": token}, {"_id": 0})
+        if session_doc:
+            expires_at = session_doc["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at >= datetime.now(timezone.utc):
+                current_user = await users_collection.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
+    
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
     if not has_event_access(current_user, "read_only"):
         raise HTTPException(status_code=403, detail="Accès non autorisé")
     
