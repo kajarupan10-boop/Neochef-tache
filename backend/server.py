@@ -7589,8 +7589,19 @@ async def create_supplier(
     current_user: dict = Depends(get_current_user)
 ):
     """Créer un fournisseur (Metro, Transgourmet, etc.)"""
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # Vérifier les permissions - admin ou permission preparation_commande.fournisseur.ajouter
+    has_permission = current_user["role"] == "admin"
+    if not has_permission:
+        detailed_permissions = current_user.get("detailed_permissions", {})
+        prep_perms = detailed_permissions.get("preparation_commande", {})
+        
+        if not prep_perms.get("actif"):
+            raise HTTPException(status_code=403, detail="Accès à Préparation de commande non autorisé")
+        
+        has_permission = prep_perms.get("fournisseur", {}).get("ajouter", False)
+    
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Permission d'ajouter des fournisseurs non accordée")
     
     supplier_id = f"sup_{uuid.uuid4().hex[:12]}"
     
@@ -7673,8 +7684,19 @@ async def update_supplier(
     current_user: dict = Depends(get_current_user)
 ):
     """Mettre à jour un fournisseur"""
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # Vérifier les permissions - admin ou permission preparation_commande.fournisseur.modifier
+    has_permission = current_user["role"] == "admin"
+    if not has_permission:
+        detailed_permissions = current_user.get("detailed_permissions", {})
+        prep_perms = detailed_permissions.get("preparation_commande", {})
+        
+        if not prep_perms.get("actif"):
+            raise HTTPException(status_code=403, detail="Accès à Préparation de commande non autorisé")
+        
+        has_permission = prep_perms.get("fournisseur", {}).get("modifier", False)
+    
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Permission de modifier des fournisseurs non accordée")
     
     update_data = {}
     
@@ -7719,8 +7741,19 @@ async def delete_supplier(
     current_user: dict = Depends(get_current_user)
 ):
     """Supprimer un fournisseur (soft delete)"""
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # Vérifier les permissions - admin ou permission preparation_commande.fournisseur.supprimer
+    has_permission = current_user["role"] == "admin"
+    if not has_permission:
+        detailed_permissions = current_user.get("detailed_permissions", {})
+        prep_perms = detailed_permissions.get("preparation_commande", {})
+        
+        if not prep_perms.get("actif"):
+            raise HTTPException(status_code=403, detail="Accès à Préparation de commande non autorisé")
+        
+        has_permission = prep_perms.get("fournisseur", {}).get("supprimer", False)
+    
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Permission de supprimer des fournisseurs non accordée")
     
     result = await suppliers_collection.update_one(
         {"supplier_id": supplier_id, "restaurant_id": current_user["restaurant_id"]},
@@ -7779,8 +7812,25 @@ async def create_supplier_product(
     current_user: dict = Depends(get_current_user)
 ):
     """Créer un produit pour un fournisseur"""
+    # Vérifier les permissions - admin ou permission preparation_commande.produits.ajouter
     if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        detailed_permissions = current_user.get("detailed_permissions", {})
+        prep_perms = detailed_permissions.get("preparation_commande", {})
+        produits_perms = prep_perms.get("produits", {})
+        consignes_perms = prep_perms.get("consignes", {})
+        
+        # Vérifier si le module est actif
+        if not prep_perms.get("actif"):
+            raise HTTPException(status_code=403, detail="Accès à Préparation de commande non autorisé")
+        
+        # Vérifier la permission selon le type de produit
+        product_type = create_request.product_type or "product"
+        if product_type == "consigne":
+            if not consignes_perms.get("ajouter"):
+                raise HTTPException(status_code=403, detail="Permission d'ajouter des consignes non accordée")
+        else:
+            if not produits_perms.get("ajouter"):
+                raise HTTPException(status_code=403, detail="Permission d'ajouter des produits non accordée")
     
     # Vérifier que le fournisseur existe
     supplier = await suppliers_collection.find_one({
@@ -7862,15 +7912,31 @@ async def update_supplier_product(
     current_user: dict = Depends(get_current_user)
 ):
     """Mettre à jour un produit"""
-    # Vérifier les permissions - admin ou permission preparation_commande avec modifier
+    # Récupérer le produit pour connaître son type
+    product = await supplier_products_collection.find_one(
+        {"product_id": product_id, "restaurant_id": current_user["restaurant_id"]},
+        {"_id": 0}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Vérifier les permissions - admin ou permission preparation_commande.produits.modifier
     has_permission = current_user["role"] == "admin"
     if not has_permission:
         detailed_permissions = current_user.get("detailed_permissions", {})
         prep_perms = detailed_permissions.get("preparation_commande", {})
-        has_permission = prep_perms.get("actif") and prep_perms.get("modifier")
+        
+        if not prep_perms.get("actif"):
+            raise HTTPException(status_code=403, detail="Accès à Préparation de commande non autorisé")
+        
+        product_type = product.get("product_type", "product")
+        if product_type == "consigne":
+            has_permission = prep_perms.get("consignes", {}).get("modifier", False)
+        else:
+            has_permission = prep_perms.get("produits", {}).get("modifier", False)
     
     if not has_permission:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=403, detail="Permission de modifier non accordée")
     
     update_data = {k: v for k, v in update_request.dict().items() if v is not None}
     
@@ -7893,8 +7959,31 @@ async def delete_supplier_product(
     current_user: dict = Depends(get_current_user)
 ):
     """Supprimer un produit (soft delete)"""
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    # Récupérer le produit pour connaître son type
+    product = await supplier_products_collection.find_one(
+        {"product_id": product_id, "restaurant_id": current_user["restaurant_id"]},
+        {"_id": 0}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Vérifier les permissions - admin ou permission preparation_commande.produits.supprimer
+    has_permission = current_user["role"] == "admin"
+    if not has_permission:
+        detailed_permissions = current_user.get("detailed_permissions", {})
+        prep_perms = detailed_permissions.get("preparation_commande", {})
+        
+        if not prep_perms.get("actif"):
+            raise HTTPException(status_code=403, detail="Accès à Préparation de commande non autorisé")
+        
+        product_type = product.get("product_type", "product")
+        if product_type == "consigne":
+            has_permission = prep_perms.get("consignes", {}).get("supprimer", False)
+        else:
+            has_permission = prep_perms.get("produits", {}).get("supprimer", False)
+    
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Permission de supprimer non accordée")
     
     result = await supplier_products_collection.update_one(
         {"product_id": product_id, "restaurant_id": current_user["restaurant_id"]},
