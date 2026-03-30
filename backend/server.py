@@ -17179,23 +17179,20 @@ async def export_event_menu_pdf(
     pdf.set_line_width(0.3)
     pdf.rect(margin + 3, margin + 3, content_width - 6, page_height - 2*margin - 6)
     
-    # ============ LOGO DU RESTAURANT - CENTRÉ (avec préservation des proportions) ============
+    # ============ LOGO DU RESTAURANT - CENTRÉ EN BLEU RAL 5008 ============
     logo_displayed = False
     max_logo_height = 35  # Hauteur maximale du logo
     max_logo_width = 60   # Largeur maximale du logo
-    header_y = margin + corner_offset + 15
+    header_y = margin + corner_offset + 5  # Réduit l'espace en haut (était +15)
     logo_actual_width = max_logo_width
     logo_actual_height = max_logo_height
     
-    # Priorité 1: Logo du restaurant en base64
-    if restaurant and restaurant.get("logo_base64"):
-        try:
+    # Priorité : Utiliser TOUJOURS le logo bleu RAL 5008 pour une meilleure visibilité sur fond beige
+    try:
+        default_logo_path = ROOT_DIR / "logo_bleu_ral5008.png"
+        if default_logo_path.exists():
             from PIL import Image as PILImage
-            logo_data = base64.b64decode(restaurant["logo_base64"])
-            logo_io = BytesIO(logo_data)
-            
-            # Lire les dimensions originales du logo
-            pil_img = PILImage.open(logo_io)
+            pil_img = PILImage.open(str(default_logo_path))
             orig_width, orig_height = pil_img.size
             
             # Calculer les nouvelles dimensions en préservant les proportions
@@ -17207,29 +17204,13 @@ async def export_event_menu_pdf(
                 logo_actual_height = min(max_logo_height, orig_height * max_logo_width / orig_width)
                 logo_actual_width = logo_actual_height * aspect_ratio
             
-            # Centrer le logo
             logo_x = center_x - logo_actual_width / 2
-            
-            # Réinitialiser le BytesIO pour la lecture par FPDF
-            logo_io.seek(0)
-            pdf.image(logo_io, x=logo_x, y=header_y, w=logo_actual_width, h=logo_actual_height)
+            pdf.image(str(default_logo_path), x=logo_x, y=header_y, w=logo_actual_width, h=logo_actual_height)
             logo_displayed = True
-        except Exception as e:
-            print(f"Restaurant logo error: {e}")
+    except Exception as e:
+        print(f"Default logo error: {e}")
     
-    # Priorité 2: Logo par défaut si pas de logo restaurant
-    if not logo_displayed:
-        try:
-            default_logo_path = ROOT_DIR / "logo_bleu_ral5008.png"
-            if default_logo_path.exists():
-                logo_x = center_x - max_logo_height / 2  # Logo par défaut carré
-                pdf.image(str(default_logo_path), x=logo_x, y=header_y, w=max_logo_height, h=max_logo_height)
-                logo_actual_height = max_logo_height
-                logo_displayed = True
-        except Exception as e:
-            print(f"Default logo error: {e}")
-    
-    # Priorité 3: Cercle avec initiales du restaurant
+    # Fallback: Cercle avec initiales du restaurant si le logo n'a pas pu être affiché
     if not logo_displayed and restaurant:
         logo_size = max_logo_height  # Utiliser la hauteur max pour le cercle
         logo_x = center_x - logo_size / 2
