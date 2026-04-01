@@ -5008,6 +5008,7 @@ class CreateMenuItemRequest(BaseModel):
     order: Optional[int] = 0
     excel_status: Optional[str] = "added"  # "added", "deleted", "modified", or "normal"
     modified_fields: Optional[List[str]] = None  # ["name", "price", "description"]
+    zelty_id: Optional[str] = None  # ID du produit dans Zelty pour l'intégration caisse
 
 class UpdateMenuItemRequest(BaseModel):
     name: Optional[str] = None
@@ -5015,6 +5016,7 @@ class UpdateMenuItemRequest(BaseModel):
     order: Optional[int] = None
     excel_status: Optional[str] = None  # "added", "deleted", "modified", or "normal"
     modified_fields: Optional[List[str]] = None  # ["name", "price", "description"]
+    zelty_id: Optional[str] = None  # ID du produit dans Zelty pour l'intégration caisse
 
 class CustomOption(BaseModel):
     name: str
@@ -5393,6 +5395,7 @@ async def create_menu_item(
         "name": create_request.name,
         "description": create_request.description,
         "order": create_request.order if create_request.order else max_order,
+        "zelty_id": create_request.zelty_id,  # ID Zelty pour intégration caisse
         "created_at": datetime.now(timezone.utc)
     }
     
