@@ -5009,6 +5009,8 @@ class CreateMenuItemRequest(BaseModel):
     excel_status: Optional[str] = "added"  # "added", "deleted", "modified", or "normal"
     modified_fields: Optional[List[str]] = None  # ["name", "price", "description"]
     zelty_id: Optional[str] = None  # ID du produit dans Zelty pour l'intégration caisse
+    cooking_options: Optional[List[str]] = None  # Options de cuisson: ["Bleu", "Saignant", "À point", "Bien cuit"]
+    requires_cooking_choice: Optional[bool] = False  # Si le client doit choisir une cuisson
 
 class UpdateMenuItemRequest(BaseModel):
     name: Optional[str] = None
@@ -5017,6 +5019,8 @@ class UpdateMenuItemRequest(BaseModel):
     excel_status: Optional[str] = None  # "added", "deleted", "modified", or "normal"
     modified_fields: Optional[List[str]] = None  # ["name", "price", "description"]
     zelty_id: Optional[str] = None  # ID du produit dans Zelty pour l'intégration caisse
+    cooking_options: Optional[List[str]] = None  # Options de cuisson: ["Bleu", "Saignant", "À point", "Bien cuit"]
+    requires_cooking_choice: Optional[bool] = None  # Si le client doit choisir une cuisson
 
 class CustomOption(BaseModel):
     name: str
@@ -5396,6 +5400,8 @@ async def create_menu_item(
         "description": create_request.description,
         "order": create_request.order if create_request.order else max_order,
         "zelty_id": create_request.zelty_id,  # ID Zelty pour intégration caisse
+        "cooking_options": create_request.cooking_options,  # Options de cuisson
+        "requires_cooking_choice": create_request.requires_cooking_choice,  # Choix cuisson obligatoire
         "created_at": datetime.now(timezone.utc)
     }
     
