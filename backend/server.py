@@ -23,8 +23,13 @@ from PIL import Image
 import asyncio
 import unicodedata
 import re
+import httpx  # Pour les appels API Zelty
 
 ROOT_DIR = Path(__file__).parent
+
+# Configuration Zelty
+ZELTY_API_URL = "https://api.zelty.fr/2.10"
+ZELTY_API_KEY = os.environ.get("ZELTY_API_KEY", "")
 
 # Fonction pour nettoyer les noms de fichiers (supprimer les caractères spéciaux)
 def sanitize_filename(name: str) -> str:
@@ -18249,6 +18254,161 @@ async def stop_keep_alive_task():
         except asyncio.CancelledError:
             pass
         logging.info("[KEEP-ALIVE] Background task stopped")
+
+
+# ==================== ZELTY POS INTEGRATION ====================
+# Intégration avec la caisse Zelty pour envoyer les commandes
+
+class ZeltyOrderItem(BaseModel):
+    """Item d'une commande Zelty"""
+    zelty_id: str  # ID du produit dans Zelty
+    quantity: int = 1
+    name: str  # Nom du produit (pour référence)
+    cooking_option: Optional[str] = None  # Option de cuisson choisie
+    notes: Optional[str] = None
+
+class ZeltyOrderRequest(BaseModel):
+    """Requête pour envoyer une commande à Zelty"""
+    reservation_id: Optional[str] = None  # ID de la réservation groupe
+    table_number: Optional[str] = None  # Numéro de table
+    customer_name: Optional[str] = None  # Nom du client
+    items: List[ZeltyOrderItem]
+    notes: Optional[str] = None
+
+@api_router.post("/zelty/send-order")
+async def send_order_to_zelty(
+    order_request: ZeltyOrderRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Envoyer une commande à la caisse Zelty"""
+    if not ZELTY_API_KEY:
+        raise HTTPException(status_code=500, detail="Clé API Zelty non configurée. Ajoutez ZELTY_API_KEY dans les variables d'environnement.")
+    
+    # Filtrer les items qui ont un zelty_id valide
+    valid_items = [item for item in order_request.items if item.zelty_id]
+    if not valid_items:
+        raise HTTPException(status_code=400, detail="Aucun produit avec ID Zelty trouvé dans la commande")
+    
+    # Construire la commande pour Zelty
+    # Note: La structure exacte dépend de la documentation Zelty
+    zelty_order = {
+        "type": "on_site",  # Sur place
+        "table": order_request.table_number or "1",
+        "customer": {
+            "name": order_request.customer_name or "Client"
+        },
+        "items": [],
+        "notes": order_request.notes or ""
+    }
+    
+    for item in valid_items:
+        zelty_item = {
+            "product_id": item.zelty_id,
+            "quantity": item.quantity,
+            "notes": ""
+        }
+        # Ajouter l'option de cuisson dans les notes si présente
+        if item.cooking_option:
+            zelty_item["notes"] = f"Cuisson: {item.cooking_option}"
+        if item.notes:
+            zelty_item["notes"] += f" - {item.notes}" if zelty_item["notes"] else item.notes
+        
+        zelty_order["items"].append(zelty_item)
+    
+    # Envoyer à Zelty
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{ZELTY_API_URL}/orders",
+                json=zelty_order,
+                headers={
+                    "Authorization": f"Bearer {ZELTY_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code in [200, 201]:
+                zelty_response = response.json()
+                
+                # Si c'est lié à une réservation, mettre à jour le statut
+                if order_request.reservation_id:
+                    await group_reservations_collection.update_one(
+                        {"reservation_id": order_request.reservation_id},
+                        {"$set": {
+                            "zelty_order_id": zelty_response.get("id"),
+                            "zelty_sent_at": datetime.now(timezone.utc).isoformat(),
+                            "zelty_status": "sent"
+                        }}
+                    )
+                
+                return {
+                    "success": True,
+                    "message": "Commande envoyée à la caisse",
+                    "zelty_order_id": zelty_response.get("id"),
+                    "items_count": len(valid_items)
+                }
+            else:
+                error_detail = response.text
+                logging.error(f"Zelty API error: {response.status_code} - {error_detail}")
+                raise HTTPException(
+                    status_code=response.status_code, 
+                    detail=f"Erreur Zelty: {error_detail}"
+                )
+                
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Timeout lors de la connexion à Zelty")
+    except httpx.RequestError as e:
+        logging.error(f"Zelty connection error: {e}")
+        raise HTTPException(status_code=503, detail=f"Erreur de connexion à Zelty: {str(e)}")
+
+@api_router.get("/zelty/test-connection")
+async def test_zelty_connection(current_user: dict = Depends(get_current_user)):
+    """Tester la connexion à l'API Zelty"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin requis")
+    
+    if not ZELTY_API_KEY:
+        return {
+            "connected": False,
+            "error": "Clé API Zelty non configurée",
+            "hint": "Ajoutez ZELTY_API_KEY dans les variables d'environnement du backend"
+        }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Tester avec un endpoint simple (liste des restaurants par exemple)
+            response = await client.get(
+                f"{ZELTY_API_URL}/restaurants",
+                headers={"Authorization": f"Bearer {ZELTY_API_KEY}"},
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "connected": True,
+                    "message": "Connexion Zelty OK",
+                    "restaurants": data if isinstance(data, list) else [data]
+                }
+            elif response.status_code == 401:
+                return {
+                    "connected": False,
+                    "error": "Clé API invalide ou expirée"
+                }
+            else:
+                return {
+                    "connected": False,
+                    "error": f"Erreur Zelty: {response.status_code}",
+                    "detail": response.text
+                }
+    except Exception as e:
+        return {
+            "connected": False,
+            "error": str(e)
+        }
+
+
 
 # ==================== FIX FOR DOUBLE API PREFIX BUG ====================
 # Handle /api/api/... by internally rewriting to /api/... (bug from old frontend code)
