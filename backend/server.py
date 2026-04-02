@@ -18095,10 +18095,6 @@ async def send_order_to_zelty(order_id: str):
     
     try:
         async with httpx.AsyncClient() as client:
-            # If no valid zelty items, still create the order with just a comment
-            if not zelty_items:
-                zelty_order["items"] = []
-            
             response = await client.post(
                 f"{ZELTY_API_URL}/orders",
                 json=zelty_order,
@@ -18108,6 +18104,32 @@ async def send_order_to_zelty(order_id: str):
                 },
                 timeout=30.0
             )
+            
+            # If items have invalid dish_id (400 error), retry without items
+            if response.status_code == 400:
+                try:
+                    error_json = response.json()
+                    if "Cannot find dish" in str(error_json) or "items" in str(error_json.get("errors", {})):
+                        # Retry without items - just create order with comment
+                        zelty_order["items"] = []
+                        all_items_manual = [
+                            f"{item.get('qty', 1)}x {item.get('name', '')}" + 
+                            (f" ({item.get('cooking_option')})" if item.get('cooking_option') else "")
+                            for item in items
+                        ]
+                        zelty_order["comment"] = "COMMANDE CLIENT: " + " | ".join(all_items_manual)
+                        
+                        response = await client.post(
+                            f"{ZELTY_API_URL}/orders",
+                            json=zelty_order,
+                            headers={
+                                "Authorization": f"Bearer {zelty_api_key}",
+                                "Content-Type": "application/json"
+                            },
+                            timeout=30.0
+                        )
+                except:
+                    pass
             
             if response.status_code in [200, 201]:
                 zelty_response = response.json()
