@@ -18027,47 +18027,129 @@ async def send_order_to_zelty(order_id: str):
     if order_id not in order_storage:
         raise HTTPException(status_code=404, detail="Commande non trouvée")
     
+    # Check if already sent
+    if order_storage[order_id].get("zelty_sent"):
+        return {"success": True, "message": "Commande déjà envoyée", "already_sent": True}
+    
     order_data = order_storage[order_id]["data"]
     items = order_data.get("items", [])
+    restaurant_name = order_data.get("restaurant", "Restaurant")
     
     # Get Zelty API key from environment
     zelty_api_key = os.environ.get("ZELTY_API_KEY")
     if not zelty_api_key:
         raise HTTPException(status_code=500, detail="Clé API Zelty non configurée")
     
-    # Build Zelty order payload
+    # Find zelty_id for each item by matching name in menu_restaurant_items
     zelty_items = []
+    items_without_zelty = []
+    
     for item in items:
-        # For now, create a simple note-based order
-        item_note = f"{item.get('qty', 1)}x {item.get('name', '')}"
-        if item.get('format'):
-            item_note += f" ({item.get('format')})"
-        if item.get('cooking_option'):
-            item_note += f" - {item.get('cooking_option')}"
-        if item.get('comp'):
-            for c in item.get('comp', []):
-                item_note += f"\n  • {c}"
-        zelty_items.append(item_note)
+        item_name = item.get("name", "")
+        qty = item.get("qty", 1)
+        cooking_option = item.get("cooking_option", "")
+        
+        # Search for item in database by name
+        db_item = await menu_restaurant_items_collection.find_one({
+            "name": {"$regex": f"^{item_name}$", "$options": "i"}
+        })
+        
+        if db_item and db_item.get("zelty_id"):
+            zelty_item = {
+                "dish_id": int(db_item["zelty_id"]) if str(db_item["zelty_id"]).isdigit() else db_item["zelty_id"],
+                "quantity": qty,
+                "notes": f"Cuisson: {cooking_option}" if cooking_option else ""
+            }
+            zelty_items.append(zelty_item)
+        else:
+            items_without_zelty.append(f"{qty}x {item_name}" + (f" ({cooking_option})" if cooking_option else ""))
+    
+    # If no items have valid zelty_id, we'll still create the order with comment
+    # The staff will add items manually on the POS
+    
+    # Build Zelty order - include restaurant_id
+    # Find restaurant_id from Zelty
+    zelty_restaurant_id = 119  # Default, should be configured
+    
+    zelty_order = {
+        "mode": "eat_in",
+        "restaurant_id": zelty_restaurant_id,
+        "table": "1",
+        "items": zelty_items,
+        "comment": ""
+    }
+    
+    # Add comment for items (easier for manual entry)
+    order_comment_parts = []
+    for item in items:
+        item_name = item.get("name", "")
+        qty = item.get("qty", 1)
+        cooking = item.get("cooking_option", "")
+        order_comment_parts.append(f"{qty}x {item_name}" + (f" ({cooking})" if cooking else ""))
+    
+    zelty_order["comment"] = " | ".join(order_comment_parts)
+    
+    # Add notes for items without zelty_id
+    if items_without_zelty:
+        zelty_order["comment"] += " | À saisir: " + ", ".join(items_without_zelty)
     
     try:
-        # For now, mark as sent (actual Zelty integration would call their API)
-        order_storage[order_id]["zelty_sent"] = True
-        
-        # In a real implementation, you would call:
-        # async with httpx.AsyncClient() as client:
-        #     response = await client.post(
-        #         "https://api.zelty.fr/2.7/orders",
-        #         headers={"Authorization": f"Bearer {zelty_api_key}"},
-        #         json={...}
-        #     )
-        
-        return {
-            "success": True,
-            "message": "Commande envoyée à la caisse",
-            "items_count": len(items)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        async with httpx.AsyncClient() as client:
+            # If no valid zelty items, still create the order with just a comment
+            if not zelty_items:
+                zelty_order["items"] = []
+            
+            response = await client.post(
+                f"{ZELTY_API_URL}/orders",
+                json=zelty_order,
+                headers={
+                    "Authorization": f"Bearer {zelty_api_key}",
+                    "Content-Type": "application/json"
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code in [200, 201]:
+                zelty_response = response.json()
+                order_storage[order_id]["zelty_sent"] = True
+                order_storage[order_id]["zelty_order_id"] = zelty_response.get("id")
+                
+                result = {
+                    "success": True,
+                    "message": "Commande envoyée à la caisse",
+                    "zelty_order_id": zelty_response.get("id"),
+                    "items_count": len(zelty_items)
+                }
+                
+                if items_without_zelty:
+                    result["items_without_zelty"] = items_without_zelty
+                    result["message"] += f" ({len(items_without_zelty)} article(s) sans ID Zelty)"
+                
+                return result
+            else:
+                error_detail = response.text
+                try:
+                    error_json = response.json()
+                    # Parse Zelty error format
+                    if "errors" in error_json:
+                        errors = error_json.get("errors", {})
+                        error_messages = []
+                        for key, msg in errors.items():
+                            if "Cannot find dish" in str(msg):
+                                error_messages.append(f"Produit non trouvé dans Zelty - vérifiez les ID Zelty configurés")
+                            else:
+                                error_messages.append(f"{key}: {msg}")
+                        error_detail = "; ".join(error_messages)
+                    else:
+                        error_detail = error_json.get("message", error_json.get("errmsg", response.text))
+                except:
+                    pass
+                raise HTTPException(status_code=response.status_code, detail=f"Erreur Zelty: {error_detail}")
+                
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Timeout - La caisse ne répond pas")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Erreur connexion: {str(e)}")
 
 # ROOT ENDPOINT moved to top of file for deployment health check
     
