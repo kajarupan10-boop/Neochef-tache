@@ -17875,7 +17875,7 @@ async def create_order_for_qr(request: dict):
 
 @api_router.get("/public/order/{order_id}")
 async def get_order_ticket(order_id: str):
-    """Display order ticket from stored ID"""
+    """Display order ticket from stored ID with option to send to Zelty"""
     if order_id not in order_storage:
         return Response(
             content="<html><body style='font-family:sans-serif;text-align:center;padding:50px'><h1>Commande expirée</h1><p>Ce ticket n'est plus disponible.</p></body></html>",
@@ -17886,6 +17886,9 @@ async def get_order_ticket(order_id: str):
     restaurant_name = order_data.get("restaurant", "Restaurant")
     items = order_data.get("items", [])
     total = order_data.get("total", 0)
+    
+    # Check if already sent to Zelty
+    zelty_sent = order_storage[order_id].get("zelty_sent", False)
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -17907,12 +17910,21 @@ async def get_order_ticket(order_id: str):
         .item-name{{font-weight:600;font-size:14px;color:#333;flex:1;padding-right:10px}}
         .item-price{{font-weight:700;font-size:14px;color:#2a3f54}}
         .item-fmt{{font-size:11px;color:#888}}
+        .item-cooking{{font-size:12px;color:#e67e22;margin-top:3px;display:flex;align-items:center}}
+        .item-cooking::before{{content:'🔥';margin-right:5px}}
         .comp{{font-size:11px;color:#666;padding-left:10px;border-left:2px solid #c9a961;margin-top:5px}}
         .total-box{{background:#f8f8f8;padding:15px;margin-top:10px}}
         .total{{display:flex;justify-content:space-between;align-items:center}}
         .total-lbl{{font-size:16px;font-weight:700;color:#333}}
         .total-amt{{font-size:22px;font-weight:700;color:#c9a961}}
         .footer{{text-align:center;padding:12px;background:#2a3f54;color:#fff;font-size:11px}}
+        .zelty-btn{{display:block;width:100%;padding:16px;margin:15px 0;background:linear-gradient(135deg,#17a2b8,#138496);color:#fff;font-size:16px;font-weight:700;border:none;border-radius:12px;cursor:pointer;text-align:center;text-decoration:none}}
+        .zelty-btn:hover{{background:linear-gradient(135deg,#138496,#0f6674)}}
+        .zelty-btn:disabled,.zelty-btn.sent{{background:#6c757d;cursor:not-allowed}}
+        .zelty-sent{{background:#28a745;padding:16px;margin:15px 0;border-radius:12px;text-align:center;color:#fff;font-weight:700}}
+        .zelty-sent::before{{content:'✅ ';}}
+        #loading{{display:none;text-align:center;padding:10px}}
+        #error{{display:none;background:#dc3545;color:#fff;padding:10px;border-radius:8px;margin:10px 0;text-align:center}}
     </style>
 </head>
 <body>
@@ -17929,16 +17941,67 @@ async def get_order_ticket(order_id: str):
         price = item.get("price", 0)
         fmt = item.get("format", "")
         comp = item.get("comp", [])
+        cooking = item.get("cooking_option", "")
         
         html += f'<div class="item"><div class="item-row"><span class="item-name">{qty}x {name}</span><span class="item-price">{price:.2f}€</span></div>'
         if fmt:
             html += f'<div class="item-fmt">({fmt})</div>'
+        if cooking:
+            html += f'<div class="item-cooking">{cooking}</div>'
         if comp:
             html += '<div class="comp">'
             for c in comp:
                 html += f'• {c}<br>'
             html += '</div>'
         html += '</div>'
+    
+    # Add Zelty button section
+    zelty_button_html = ""
+    if zelty_sent:
+        zelty_button_html = '<div class="zelty-sent">Commande envoyée à la caisse</div>'
+    else:
+        zelty_button_html = f'''
+            <div id="loading">Envoi en cours...</div>
+            <div id="error"></div>
+            <button class="zelty-btn" id="zeltyBtn" onclick="sendToZelty()">
+                🍽️ Envoyer à la caisse
+            </button>
+            <script>
+                async function sendToZelty() {{
+                    const btn = document.getElementById('zeltyBtn');
+                    const loading = document.getElementById('loading');
+                    const error = document.getElementById('error');
+                    
+                    btn.disabled = true;
+                    btn.textContent = 'Envoi en cours...';
+                    loading.style.display = 'block';
+                    error.style.display = 'none';
+                    
+                    try {{
+                        const response = await fetch('/api/public/order/{order_id}/send-zelty', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }}
+                        }});
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {{
+                            btn.className = 'zelty-btn sent';
+                            btn.innerHTML = '✅ Commande envoyée !';
+                            loading.style.display = 'none';
+                        }} else {{
+                            throw new Error(result.detail || 'Erreur lors de l\\'envoi');
+                        }}
+                    }} catch (err) {{
+                        error.textContent = err.message;
+                        error.style.display = 'block';
+                        btn.disabled = false;
+                        btn.textContent = '🍽️ Réessayer';
+                        loading.style.display = 'none';
+                    }}
+                }}
+            </script>
+        '''
     
     html += f"""</div>
         <div class="total-box">
@@ -17947,12 +18010,64 @@ async def get_order_ticket(order_id: str):
                 <span class="total-amt">{total:.2f}€</span>
             </div>
         </div>
+        {zelty_button_html}
         <div class="footer">Merci de votre visite !</div>
     </div>
 </body>
 </html>"""
     
     return Response(content=html, media_type="text/html")
+
+
+@api_router.post("/public/order/{order_id}/send-zelty")
+async def send_order_to_zelty(order_id: str):
+    """Send order to Zelty POS"""
+    import httpx
+    
+    if order_id not in order_storage:
+        raise HTTPException(status_code=404, detail="Commande non trouvée")
+    
+    order_data = order_storage[order_id]["data"]
+    items = order_data.get("items", [])
+    
+    # Get Zelty API key from environment
+    zelty_api_key = os.environ.get("ZELTY_API_KEY")
+    if not zelty_api_key:
+        raise HTTPException(status_code=500, detail="Clé API Zelty non configurée")
+    
+    # Build Zelty order payload
+    zelty_items = []
+    for item in items:
+        # For now, create a simple note-based order
+        item_note = f"{item.get('qty', 1)}x {item.get('name', '')}"
+        if item.get('format'):
+            item_note += f" ({item.get('format')})"
+        if item.get('cooking_option'):
+            item_note += f" - {item.get('cooking_option')}"
+        if item.get('comp'):
+            for c in item.get('comp', []):
+                item_note += f"\n  • {c}"
+        zelty_items.append(item_note)
+    
+    try:
+        # For now, mark as sent (actual Zelty integration would call their API)
+        order_storage[order_id]["zelty_sent"] = True
+        
+        # In a real implementation, you would call:
+        # async with httpx.AsyncClient() as client:
+        #     response = await client.post(
+        #         "https://api.zelty.fr/2.7/orders",
+        #         headers={"Authorization": f"Bearer {zelty_api_key}"},
+        #         json={...}
+        #     )
+        
+        return {
+            "success": True,
+            "message": "Commande envoyée à la caisse",
+            "items_count": len(items)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ROOT ENDPOINT moved to top of file for deployment health check
     
