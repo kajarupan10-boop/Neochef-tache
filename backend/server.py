@@ -945,6 +945,10 @@ class CreateMenuRestaurantItemRequest(BaseModel):
     tags: Optional[List[str]] = []  # Liste des tags (ex: ["vegetarien", "epice"])
     excel_status: Optional[str] = "added"  # "added" (vert), "deleted" (rouge), "modified" (violet), "normal"
     modified_fields: Optional[List[str]] = []  # ["name", "price", "description"] - pour coloration Excel
+    # Intégration Zelty et options de cuisson
+    zelty_id: Optional[str] = None  # ID du produit dans Zelty pour l'intégration caisse
+    cooking_options: Optional[List[str]] = None  # Options de cuisson: ["Bleu", "Saignant", "À point", "Bien cuit"]
+    requires_cooking_choice: Optional[bool] = False  # Si le client doit choisir une cuisson
 
 class UpdateMenuRestaurantItemRequest(BaseModel):
     name: Optional[str] = None
@@ -964,6 +968,10 @@ class UpdateMenuRestaurantItemRequest(BaseModel):
     excel_status: Optional[str] = None  # "added" (vert), "deleted" (rouge), "modified" (violet), "normal"
     modified_fields: Optional[List[str]] = None  # ["name", "price", "description"] - pour coloration Excel
     status: Optional[str] = None  # Statut UI: "a_ajouter", "a_supprimer", "a_modifier", "normal"
+    # Intégration Zelty et options de cuisson
+    zelty_id: Optional[str] = None  # ID du produit dans Zelty pour l'intégration caisse
+    cooking_options: Optional[List[str]] = None  # Options de cuisson: ["Bleu", "Saignant", "À point", "Bien cuit"]
+    requires_cooking_choice: Optional[bool] = None  # Si le client doit choisir une cuisson
 
 class CreateMenuRestaurantNoteRequest(BaseModel):
     """Créer une note de menu (ex: Happy Hour -20%)"""
@@ -10682,7 +10690,11 @@ async def create_menu_restaurant_item(
         "allergens": create_request.allergens or [],
         "tags": create_request.tags or [],
         "excel_status": create_request.excel_status or "added",  # Nouveaux items = ajoutés (vert)
-        "modified_fields": create_request.modified_fields or ["name", "price", "description"]  # Tous en vert
+        "modified_fields": create_request.modified_fields or ["name", "price", "description"],  # Tous en vert
+        # Intégration Zelty et cuisson
+        "zelty_id": create_request.zelty_id,
+        "cooking_options": create_request.cooking_options,
+        "requires_cooking_choice": create_request.requires_cooking_choice or False
     }
     await menu_restaurant_items_collection.insert_one(item)
     
@@ -10819,6 +10831,14 @@ async def update_menu_restaurant_item(
         update_data["modified_fields"] = update_request.modified_fields
     if update_request.status is not None:
         update_data["status"] = update_request.status
+    
+    # Handle Zelty integration and cooking options
+    if update_request.zelty_id is not None:
+        update_data["zelty_id"] = update_request.zelty_id if update_request.zelty_id else None
+    if update_request.cooking_options is not None:
+        update_data["cooking_options"] = update_request.cooking_options if update_request.cooking_options else None
+    if update_request.requires_cooking_choice is not None:
+        update_data["requires_cooking_choice"] = update_request.requires_cooking_choice
     
     if update_data:
         await menu_restaurant_items_collection.update_one(
