@@ -1861,7 +1861,9 @@ async def get_public_menu(restaurant_id: str, menu_type: Optional[str] = None):
             "tags": 1,
             "section_id": 1,
             "order": 1,
-            "tva_rate": 1
+            "tva_rate": 1,
+            "cooking_options": 1,
+            "requires_cooking_choice": 1
         }
     ).sort("order", 1).to_list(500)
     
