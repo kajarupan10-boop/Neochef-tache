@@ -35,8 +35,8 @@
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/logo.png",
-      "themeColor": "#2c5f2d",
-      "backgroundColor": "#2c5f2d",
+      "themeColor": "#C97B2A",
+      "backgroundColor": "#8E561D",
       "display": "standalone",
       "orientation": "portrait",
       "startUrl": "/",
@@ -66,7 +66,9 @@
       [
         "expo-font",
         {
-          "fonts": ["./assets/fonts/SpaceMono-Regular.ttf"]
+          "fonts": [
+            "./assets/fonts/SpaceMono-Regular.ttf"
+          ]
         }
       ],
       [
@@ -75,7 +77,7 @@
           "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#8E561D"
         }
       ]
     ],

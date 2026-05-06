@@ -400,7 +400,7 @@ interface MenuItem { item_id: string; section_id: string; name: string; descript
 interface GroupReservation { reservation_id: string; client_name: string; client_surname: string; client_email?: string; client_phone?: string; num_people: number; date: string; time: string; selected_sections: string[]; selected_items: {[key: string]: string[]}; price_per_person?: number; client_token: string; client_selections?: any; status: string; client_link?: string; proposal_status?: string; is_credit_client?: boolean; }
 interface Prestataire { prestataire_id: string; restaurant_id: string; nom_societe: string; contact?: string; telephone?: string; email?: string; note?: string; tarifs?: string; created_at?: string; updated_at?: string; }
 
-const DEFAULT_PRIMARY = '#26252D';
+const DEFAULT_PRIMARY = '#2C5F2D';
 const DEFAULT_SECONDARY = '#EAE6CA';
 
 // ==================== FONCTION UNIVERSELLE TÉLÉCHARGEMENT/PARTAGE PWA ====================

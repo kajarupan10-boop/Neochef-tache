@@ -13,11 +13,11 @@ Le backend FastAPI (`/app/backend/server.py`) et la base MongoDB sont **partagé
 
 ## 📱 Identifiants iOS
 
-| App         | Bundle ID            | Nom affiché      | Slug             | Scheme         |
-|-------------|----------------------|------------------|------------------|----------------|
-| Tâches      | `com.neochef.taches` | NeoChef Tâches   | `neochef-taches` | `neocheftaches`|
-| Menu        | `com.neochef.menu`   | NeoChef Menu     | `neochef-menu`   | `neochefmenu`  |
-| Events      | `com.neochef.events` | NeoChef Events   | `neochef-events` | `neochefevents`|
+| App         | Bundle ID            | Nom affiché      | Slug             | Scheme         | Couleur          |
+|-------------|----------------------|------------------|------------------|----------------|------------------|
+| Tâches      | `com.neochef.taches` | NeoChef Tâches   | `neochef-taches` | `neocheftaches`| 🟢 Vert sauge `#2C5F2D` |
+| Menu        | `com.neochef.menu`   | NeoChef Menu     | `neochef-menu`   | `neochefmenu`  | 🟠 Ambre cuivré `#C97B2A` |
+| Events      | `com.neochef.events` | NeoChef Events   | `neochef-events` | `neochefevents`| 🟣 Pourpre `#6B4CA3` |
 
 ## 📊 Périmètre fonctionnel par app
 

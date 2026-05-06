@@ -35,8 +35,8 @@
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/logo.png",
-      "themeColor": "#2c5f2d",
-      "backgroundColor": "#2c5f2d",
+      "themeColor": "#6B4CA3",
+      "backgroundColor": "#4A3373",
       "display": "standalone",
       "orientation": "portrait",
       "startUrl": "/",
@@ -44,8 +44,16 @@
       "shortName": "NeoChef Events",
       "description": "Gestion des événements, facturation et prestataires",
       "icons": [
-        { "src": "./assets/images/logo.png", "sizes": "192x192", "type": "image/png" },
-        { "src": "./assets/images/icon.png", "sizes": "512x512", "type": "image/png" }
+        {
+          "src": "./assets/images/logo.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        },
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
       ],
       "meta": {
         "apple-mobile-web-app-capable": "yes",
@@ -55,15 +63,27 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-font", { "fonts": ["./assets/fonts/SpaceMono-Regular.ttf"] }],
-      ["expo-splash-screen", {
-        "image": "./assets/images/icon.png",
-        "imageWidth": 200,
-        "resizeMode": "contain",
-        "backgroundColor": "#000000"
-      }]
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/SpaceMono-Regular.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#4A3373"
+        }
+      ]
     ],
-    "experiments": { "typedRoutes": true },
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
       "eas": {},
       "router": {},
