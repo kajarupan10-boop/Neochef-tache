@@ -1,5 +1,26 @@
 # NeoChef - Product Requirements Document
 
+## ⭐ Mise à jour 5 février 2026 — Découpe en 3 apps iOS
+
+L'application monolithique a été divisée en **3 applications iOS indépendantes** car le monolithe était trop lourd pour la compilation/publication App Store :
+
+- **App 1 — NeoChef Tâches** (`com.neochef.taches`) : Tâches du jour, préparation, modèles, catégories, tâches permanentes, préparation de commande, historique. Bundle JS : 3.9 MB.
+- **App 2 — NeoChef Menu** (`com.neochef.menu`) ⭐ priorité user : Menu Restaurant (publié + brouillon), Menu Client public, Fiche Technique, Rapport Ardoise. Bundle JS : 4.5 MB.
+- **App 3 — NeoChef Events** (`com.neochef.events`) : Menu Groupe, création de groupes, événements, facturation, prestataires. Bundle JS : 4.0 MB.
+
+**Authentification** : 3 écrans de login indépendants, **DB MongoDB utilisateurs partagée** (mêmes credentials, sessions iOS séparées via AsyncStorage par bundle).
+
+**Backend FastAPI partagé** : `/app/backend/server.py` non modifié, sert les 3 apps simultanément.
+
+**Stratégie technique** : copie du monolithe, stub des écrans non pertinents (`function X() { return null }`) + filtrage du menu de navigation. Scripts dans `/app/scripts/build_three_apps.py` et `customize_navigation_v2.py`.
+
+Build Web testé OK pour les 3 apps. Reste à exécuter `eas build --platform ios` pour chaque app après création des `ascAppId` dans App Store Connect.
+
+---
+
+
+# NeoChef - Product Requirements Document
+
 ## Résumé du Produit
 NeoChef est une PWA de gestion de restaurant complète comprenant:
 - Gestion des menus (carte, ardoise)
@@ -9,11 +30,16 @@ NeoChef est une PWA de gestion de restaurant complète comprenant:
 - Génération de PDF (menus, propositions événements, factures, commandes)
 - Rapport mensuel des commandes fournisseurs (par produit ou par date)
 
-## Architecture Technique
-- **Frontend**: Expo for Web (React Native Web) - `/app/temp_clone/frontend`
-- **Backend**: FastAPI - `/app/backend/server.py`
-- **Database**: MongoDB
-- **Build servi depuis**: `/app/frontend/build` (copie de `temp_clone/frontend/dist`)
+## Architecture Technique (refonte 5 février 2026)
+- **Frontend** : 3 applications Expo iOS indépendantes dans `/app/apps/`
+  - `neochef-taches/` (com.neochef.taches) — Tâches + Préparation de commande
+  - `neochef-menu/` (com.neochef.menu) — Menus + Fiche Technique + Rapport Ardoise
+  - `neochef-events/` (com.neochef.events) — Events + Facturation + Prestataires
+- **Backend**: FastAPI - `/app/backend/server.py` (partagé)
+- **Database**: MongoDB (partagée, mêmes comptes utilisateurs pour les 3 apps)
+- **Monolithe historique** : `/app/temp_clone/frontend/` conservé en lecture seule
+
+Voir `/app/apps/README.md` pour le détail de la structure et des bundle IDs iOS.
 
 ## Session du 21 Mars 2026 (suite)
 
