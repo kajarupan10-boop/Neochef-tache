@@ -92,3 +92,12 @@ temp_clone/.git/objects/pack/pack-999dbe0868fd1e3776fd0ef6fa875f1216b0d451.pack
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
