@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 class NeoChefAPITester:
-    def __init__(self, base_url="https://ios-pdf-repair.preview.emergentagent.com"):
+    def __init__(self, base_url="https://chef-tasks.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
@@ -228,7 +228,7 @@ class NeoChefAPITester:
 def main():
     """Run all tests"""
     print("🚀 Starting NeoChef PWA Backend Tests...")
-    print(f"Target URL: https://ios-pdf-repair.preview.emergentagent.com")
+    print(f"Target URL: https://chef-tasks.preview.emergentagent.com")
     
     tester = NeoChefAPITester()
     

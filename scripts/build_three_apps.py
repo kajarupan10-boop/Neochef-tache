@@ -195,7 +195,7 @@ def write_app_json(cfg: dict, app_dir: Path):
     "extra": {{
       "eas": {{}},
       "router": {{}},
-      "EXPO_BACKEND_URL": "https://ios-pdf-repair.preview.emergentagent.com"
+      "EXPO_BACKEND_URL": "https://chef-tasks.preview.emergentagent.com"
     }}
   }}
 }}
