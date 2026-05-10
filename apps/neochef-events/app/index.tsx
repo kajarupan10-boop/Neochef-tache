@@ -572,8 +572,6 @@ export default function MiseEnPlaceApp() {
   const [publicGroupRequestRestaurantId, setPublicGroupRequestRestaurantId] = useState<string | null>(null);
   // État pour le suivi de réservation client
   const [trackGroupToken, setTrackGroupToken] = useState<string | null>(null);
-  // État pour le menu public (QR code)
-  const [publicMenuRestaurantId, setPublicMenuRestaurantId] = useState<string | null>(null);
   
   // Multi-Restaurant State
   const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
@@ -663,7 +661,7 @@ export default function MiseEnPlaceApp() {
   
   // Update bottom safe area color based on current screen (for screens without bottom nav)
   useEffect(() => {
-    const screensWithoutBottomNav = ['ficheTechnique', 'menuRestaurant', 'menuRestaurantDraft', 'events', 'facturation', 'rapportArdoise', 'menuGroupe', 'orderPrep'];
+    const screensWithoutBottomNav = ['events', 'facturation', 'menuGroupe'];
     const needsBottomCover = screensWithoutBottomNav.includes(currentScreen);
     
     if (needsBottomCover && secondaryColor) {
@@ -713,15 +711,6 @@ export default function MiseEnPlaceApp() {
         window.history.replaceState({}, document.title, window.location.pathname);
         return;
       }
-      
-      // Check for menu (menu public QR code)
-      const menuRestId = urlParams.get('menu');
-      if (menuRestId) {
-        setPublicMenuRestaurantId(menuRestId);
-        setIsLoading(false);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return;
-      }
     }
     loadSession();
   }, []);
@@ -740,21 +729,7 @@ export default function MiseEnPlaceApp() {
       setUser(data.user);
       setRestaurant(data.restaurant);
       await loadCategories(token);
-      await loadDailyTasks(token, selectedDate);
-      await loadTaskTemplates(token);
       await loadUsers(token);
-      // Charger les sous-tâches et leurs complétions
-      console.log('[fetchUserData] About to load subtasks...');
-      await loadSubtasks(token);
-      console.log('[fetchUserData] loadSubtasks done');
-      await loadSubtaskCompletions(selectedDate, token);
-      console.log('[fetchUserData] loadSubtaskCompletions done');
-      // Charger les sous-tâches permanentes
-      console.log('[fetchUserData] About to load permanent subtasks...');
-      await loadPermanentSubtasks(token);
-      console.log('[fetchUserData] loadPermanentSubtasks done');
-      await loadPermanentSubtaskCompletions(selectedDate, token);
-      console.log('[fetchUserData] All loading done');
       // Charger la liste des restaurants pour les admins
       if (data.user.role === 'admin') {
         await loadMyRestaurants(token);
@@ -771,32 +746,9 @@ export default function MiseEnPlaceApp() {
     catch (error) { console.error('Error loading categories:', error); }
   };
 
-  const loadTaskTemplates = async (token?: string) => {
-    try { const data = await apiRequest('/task-templates/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setTaskTemplates(data); }
-    catch (error) { console.error('Error loading task templates:', error); }
-  };
-
-  const loadDailyTasks = async (token?: string, date?: string) => {
-    try {
-      const queryDate = date || selectedDate;
-      const data = await apiRequest(`/daily-tasks/list?date=${queryDate}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined });
-      setDailyTasks(data);
-    } catch (error) { console.error('Error loading daily tasks:', error); }
-  };
-
-  const loadPendingTasks = async (date?: string) => {
-    try { const queryDate = date || prepareDate; const data = await apiRequest(`/daily-tasks/pending?date=${queryDate}`); setPendingTasks(data); }
-    catch (error) { console.error('Error loading pending tasks:', error); }
-  };
-
   const loadUsers = async (token?: string) => {
     try { const data = await apiRequest('/users/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setUsers(data); }
     catch (error) { console.error('Error loading users:', error); }
-  };
-
-  const loadHistory = async () => {
-    try { const data = await apiRequest(`/history?date=${selectedDate}`); setHistory(data); }
-    catch (error) { console.error('Error loading history:', error); }
   };
 
   // Prestataires Functions
@@ -837,96 +789,6 @@ export default function MiseEnPlaceApp() {
     catch (error) { console.error('Error loading group reservations:', error); }
   };
 
-  // Permanent Tasks Functions
-  const loadPermanentCategories = async (token?: string) => {
-    try { const data = await apiRequest('/permanent-categories/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setPermanentCategories(data); }
-    catch (error) { console.error('Error loading permanent categories:', error); }
-  };
-
-  const loadPermanentTasks = async (token?: string) => {
-    try { const data = await apiRequest('/permanent-tasks/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setPermanentTasks(data); }
-    catch (error) { console.error('Error loading permanent tasks:', error); }
-  };
-
-  // Subtasks Functions (pour l'écran des tâches quotidiennes)
-  const loadSubtasks = async (token?: string) => {
-    try { 
-      console.log('[loadSubtasks] Loading subtasks with token:', token ? 'yes' : 'no');
-      const data = await apiRequest('/subtasks/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      console.log('[loadSubtasks] Subtasks loaded:', data?.length || 0);
-      setSubtasks(data); 
-    }
-    catch (error) { console.error('Error loading subtasks:', error); }
-  };
-
-  const loadSubtaskCompletions = async (date: string, token?: string) => {
-    try { 
-      const data = await apiRequest(`/subtasks/completions?date=${date}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setSubtaskCompletions(data); 
-    }
-    catch (error) { console.error('Error loading subtask completions:', error); }
-  };
-
-  // Permanent Subtasks Functions
-  const loadPermanentSubtasks = async (token?: string) => {
-    try { 
-      console.log('[loadPermanentSubtasks] Loading with token:', token ? 'yes' : 'no');
-      const data = await apiRequest('/permanent-subtasks/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      console.log('[loadPermanentSubtasks] Loaded:', data?.length || 0);
-      setPermanentSubtasks(data); 
-    }
-    catch (error) { console.error('Error loading permanent subtasks:', error); }
-  };
-
-  const loadPermanentSubtaskCompletions = async (date: string, token?: string) => {
-    try { 
-      const data = await apiRequest(`/permanent-subtasks/completions?date=${date}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setPermanentSubtaskCompletions(data); 
-    }
-    catch (error) { console.error('Error loading permanent subtask completions:', error); }
-  };
-
-  // Préparation de Commande Functions (Order Preparation)
-  const loadSuppliers = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/suppliers/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setSuppliers(data); 
-    }
-    catch (error) { console.error('Error loading suppliers:', error); }
-  };
-
-  const loadSupplierProducts = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/supplier-products/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setSupplierProducts(data); 
-    }
-    catch (error) { console.error('Error loading supplier products:', error); }
-  };
-
-  const loadSupplierOrders = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/supplier-orders/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setSupplierOrders(data); 
-    }
-    catch (error) { console.error('Error loading supplier orders:', error); }
-  };
-
-  // Fiche Technique Functions
-  const loadFicheSections = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/fiche-sections/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setFicheSections(data); 
-    }
-    catch (error) { console.error('Error loading fiche sections:', error); }
-  };
-
-  const loadFicheProducts = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/fiche-products/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setFicheProducts(data); 
-    }
-    catch (error) { console.error('Error loading fiche products:', error); }
-  };
 
   // Menu Restaurant Functions (Carte Food & Carte Boisson)
   const loadMenuRestaurantSections = async (token?: string) => {
@@ -947,97 +809,6 @@ export default function MiseEnPlaceApp() {
       setMenuRestaurantItems(data); 
     }
     catch (error) { console.error('Error loading menu restaurant items:', error); }
-  };
-
-  const loadMenuRestaurantNotes = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/menu-restaurant/notes/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setMenuRestaurantNotes(data); 
-    }
-    catch (error) { console.error('Error loading menu restaurant notes:', error); }
-  };
-
-  // Menu Restaurant Draft (Brouillon) Functions
-  const loadMenuRestaurantDraftSections = async () => {
-    try { 
-      console.log('[LOAD] Loading menu restaurant draft sections...');
-      const data = await apiRequest('/menu-restaurant-draft/sections/list'); 
-      console.log('[LOAD] Menu restaurant draft sections loaded:', data?.length || 0, 'sections');
-      setMenuRestaurantDraftSections(data || []); 
-      return data || [];
-    }
-    catch (error) { 
-      console.error('Error loading menu restaurant draft sections:', error); 
-      setMenuRestaurantDraftSections([]);
-      return [];
-    }
-  };
-
-  const loadMenuRestaurantDraftItems = async () => {
-    try { 
-      console.log('[LOAD] Loading menu restaurant draft items...');
-      const data = await apiRequest('/menu-restaurant-draft/items/list'); 
-      console.log('[LOAD] Menu restaurant draft items loaded:', data?.length || 0, 'items');
-      setMenuRestaurantDraftItems(data || []); 
-      return data || [];
-    }
-    catch (error) { 
-      console.error('Error loading menu restaurant draft items:', error); 
-      setMenuRestaurantDraftItems([]);
-      return [];
-    }
-  };
-  
-  // Charger et initialiser automatiquement le brouillon s'il est vide
-  const loadAndInitializeDraftIfEmpty = async () => {
-    try {
-      console.log('[DRAFT] Checking draft status...');
-      const sections = await apiRequest('/menu-restaurant-draft/sections/list');
-      const items = await apiRequest('/menu-restaurant-draft/items/list');
-      
-      if ((!sections || sections.length === 0) && (!items || items.length === 0)) {
-        console.log('[DRAFT] Draft is empty, initializing from main menu...');
-        await apiRequest('/menu-restaurant-draft/initialize', { method: 'POST' });
-        // Recharger après initialisation
-        const newSections = await apiRequest('/menu-restaurant-draft/sections/list');
-        const newItems = await apiRequest('/menu-restaurant-draft/items/list');
-        setMenuRestaurantDraftSections(newSections || []);
-        setMenuRestaurantDraftItems(newItems || []);
-        console.log('[DRAFT] Draft initialized with', newSections?.length || 0, 'sections and', newItems?.length || 0, 'items');
-      } else {
-        setMenuRestaurantDraftSections(sections || []);
-        setMenuRestaurantDraftItems(items || []);
-        console.log('[DRAFT] Draft already has data:', sections?.length || 0, 'sections,', items?.length || 0, 'items');
-      }
-    } catch (error) {
-      console.error('[DRAFT] Error loading/initializing draft:', error);
-    }
-  };
-
-  const publishDraftToMenuRestaurant = async () => {
-    try {
-      await apiRequest('/menu-restaurant-draft/publish', { method: 'POST' });
-      showAlert('Succès', 'Le menu a été mis à jour avec succès !');
-      // Recharger les données
-      loadMenuRestaurantSections();
-      loadMenuRestaurantItems();
-      setIsDraftModified(false);
-    } catch (error) {
-      console.error('Error publishing draft:', error);
-      showAlert('Erreur', 'Impossible de publier les modifications');
-    }
-  };
-
-  const initializeDraftFromMenuRestaurant = async () => {
-    try {
-      await apiRequest('/menu-restaurant-draft/initialize', { method: 'POST' });
-      showAlert('Succès', 'Le brouillon a été initialisé depuis le menu actuel');
-      loadMenuRestaurantDraftSections();
-      loadMenuRestaurantDraftItems();
-    } catch (error) {
-      console.error('Error initializing draft:', error);
-      showAlert('Erreur', 'Impossible d\'initialiser le brouillon');
-    }
   };
 
   // Events Functions (Module Événements)
@@ -1073,51 +844,6 @@ export default function MiseEnPlaceApp() {
       const data = await apiRequest('/invoices/list');
       setInvoices(data);
     } catch (error) { console.error('Error loading invoices:', error); }
-  };
-
-  // Ardoise Functions (Rapport des ventes)
-  const loadArdoiseData = async () => {
-    try {
-      const data = await apiRequest('/ardoise/by-restaurant/' + restaurant.restaurant_id);
-      setArdoiseData(data);
-      // Also load report
-      loadArdoiseReport();
-    } catch (error) { console.error('Error loading ardoise:', error); }
-  };
-
-  const loadArdoiseReport = async () => {
-    try {
-      const data = await apiRequest('/ardoise/sales/report/' + restaurant.restaurant_id + '?period=' + ardoiseReportPeriod);
-      setArdoiseReport(data);
-    } catch (error) { console.error('Error loading ardoise report:', error); }
-  };
-
-  const saveArdoiseSales = async (salesData: any) => {
-    try {
-      await apiRequest('/ardoise/sales/' + restaurant.restaurant_id, {
-        method: 'POST',
-        body: JSON.stringify(salesData)
-      });
-      showAlert('Succès', 'Ventes enregistrées avec succès');
-      loadArdoiseReport();
-    } catch (error) { 
-      console.error('Error saving ardoise sales:', error);
-      showAlert('Erreur', 'Erreur lors de l\'enregistrement des ventes');
-    }
-  };
-
-  const updateArdoise = async (ardoiseUpdate: any) => {
-    try {
-      await apiRequest('/ardoise/' + restaurant.restaurant_id, {
-        method: 'PUT',
-        body: JSON.stringify(ardoiseUpdate)
-      });
-      showAlert('Succès', 'Ardoise mise à jour');
-      loadArdoiseData();
-    } catch (error) { 
-      console.error('Error updating ardoise:', error);
-      showAlert('Erreur', 'Erreur lors de la mise à jour');
-    }
   };
 
   // Multi-Restaurant Functions
@@ -1183,33 +909,19 @@ export default function MiseEnPlaceApp() {
       console.log('[SWITCH] Loading all data for new restaurant...');
       await Promise.all([
         loadCategories(),
-        loadDailyTasks(undefined, selectedDate),
-        loadTaskTemplates(),
         loadUsers(),
-        loadSubtasks(),
-        loadSubtaskCompletions(selectedDate),
-        loadPermanentSubtasks(),
-        loadPermanentSubtaskCompletions(selectedDate),
-        loadPermanentCategories(),
-        loadPermanentTasks(),
         loadMenuSections(),
         loadMenuItems(),
         loadGroupReservations(),
         loadMenuRestaurantSections(),
         loadMenuRestaurantItems(),
-        loadMenuRestaurantNotes(),
-        loadFicheSections(),
-        loadFicheProducts(),
-        loadSuppliers(),
-        loadSupplierProducts(),
-        loadSupplierOrders(),
         loadEvents(),
         loadInvoices(),
+        loadPrestataires(),
       ]);
       
-      console.log('[SWITCH] All data loaded, switching to daily screen');
-      // Revenir à l'écran principal
-      setCurrentScreen('daily');
+      console.log('[SWITCH] All data loaded');
+      setCurrentScreen('events');
       setIsLoading(false);
       showAlert('Succès', `Vous êtes maintenant sur ${data.restaurant.name}`);
     } catch (error: any) { 
@@ -1259,8 +971,6 @@ export default function MiseEnPlaceApp() {
       await loadMyRestaurants();
       // Charger les données du nouveau restaurant
       await loadCategories();
-      await loadDailyTasks(undefined, selectedDate);
-      await loadTaskTemplates();
       await loadUsers();
       // Fermer le modal
       setShowLinkRestaurantModal(false);
@@ -1299,18 +1009,15 @@ export default function MiseEnPlaceApp() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadCategories();
-    await loadDailyTasks(undefined, selectedDate);
-    await loadTaskTemplates();
     await loadUsers();
-    await loadSubtasks();
-    await loadSubtaskCompletions(selectedDate);
+    await loadEvents();
     setRefreshing(false);
-  }, [selectedDate]);
+  }, []);
 
   const handleLogout = async () => {
     try { await apiRequest('/auth/logout', { method: 'POST' }); } catch (error) {}
     await AsyncStorage.removeItem('session_token');
-    setSessionToken(null); setUser(null); setRestaurant(null); setCategories([]); setDailyTasks([]); setTaskTemplates([]);
+    setSessionToken(null); setUser(null); setRestaurant(null); setCategories([]);
   };
 
   // Changer mot de passe
@@ -1408,11 +1115,6 @@ export default function MiseEnPlaceApp() {
   if (trackGroupToken) {
     return <TrackGroupReservationScreen token={trackGroupToken} onClose={() => setTrackGroupToken(null)} />;
   }
-  
-  // Si un publicMenuRestaurantId est présent, afficher le menu public (QR code)
-  if (publicMenuRestaurantId) {
-    return <PublicMenuScreen restaurantId={publicMenuRestaurantId} onClose={() => setPublicMenuRestaurantId(null)} />;
-  }
 
   if (!sessionToken || !user) {
     return <LoginScreen onLogin={async (token, userData, restaurantData) => {
@@ -1438,16 +1140,12 @@ export default function MiseEnPlaceApp() {
       }
       // Ne charger les données que si un restaurant est sélectionné
       if (restaurantData) {
-        loadCategories(token); loadDailyTasks(token, selectedDate); loadTaskTemplates(token); loadUsers(token);
-        // Charger les sous-tâches et leurs complétions
-        loadSubtasks(token); loadSubtaskCompletions(selectedDate, token);
-        // Charger les sous-tâches permanentes
-        loadPermanentSubtasks(token); loadPermanentSubtaskCompletions(selectedDate, token);
-        // Charger les données pour tous les écrans (Fiche Technique, Menu Restaurant, Events, etc.)
-        loadFicheSections(token); loadFicheProducts(token);
-        loadMenuRestaurantSections(token); loadMenuRestaurantItems(token); loadMenuRestaurantNotes(token);
-        loadEvents(token);
+        loadCategories(token); loadUsers(token);
+        // Charger les données pour Menu Groupe, Events, Prestataires
+        loadMenuRestaurantSections(token); loadMenuRestaurantItems(token);
+        loadEvents();
         loadGroupReservations(token);
+        loadPrestataires();
       }
       // Charger les restaurants pour les admins, holdings ET staff avec plusieurs restaurants
       if (userData.role === 'admin' || userData.role === 'holding' || (userData.role === 'staff' && userData.restaurant_ids && userData.restaurant_ids.length > 1)) { 
@@ -1573,7 +1271,7 @@ export default function MiseEnPlaceApp() {
 
   // Déterminer si on est dans le mode Menu Groupe
   const isMenuGroupeMode = currentScreen === 'menuGroupe' || currentScreen === 'createGroup';
-  const isOrderPrepMode = currentScreen === 'orderPrep';
+  const isOrderPrepMode = false;
   
   // Vérifier si l'utilisateur a accès au Menu Groupe
   const hasMenuGroupeAccess = () => {
@@ -1835,7 +1533,7 @@ export default function MiseEnPlaceApp() {
   return (
     <SafeAreaWrapper 
       backgroundColor={primaryColor} 
-      bottomBackgroundColor={(currentScreen === 'ficheTechnique' || currentScreen === 'menuRestaurant' || currentScreen === 'menuRestaurantDraft' || currentScreen === 'events' || currentScreen === 'facturation' || currentScreen === 'rapportArdoise' || isMenuGroupeMode || isOrderPrepMode) ? secondaryColor : undefined}
+      bottomBackgroundColor={(currentScreen === 'events' || currentScreen === 'facturation' || isMenuGroupeMode) ? secondaryColor : undefined}
       style={styles.container}
     >
       <StatusBar style="light" />
@@ -1918,7 +1616,6 @@ export default function MiseEnPlaceApp() {
                 <WebIcon name="people-outline" size={20} color={secondaryColor} />
                 <Text style={[styles.settingsDropdownText, { color: secondaryColor }]}>Équipe</Text>
               </TouchableOpacity>
-              {/* [APP-FILTER] History settings masqué */}
               <TouchableOpacity 
                 style={styles.settingsDropdownItem} 
                 onPress={() => { setShowSettingsDropdown(false); setCurrentScreen('prestataires'); loadPrestataires(); }}
@@ -1951,17 +1648,11 @@ export default function MiseEnPlaceApp() {
       {showManagerMenu && shouldShowMenu() && (
         <View style={[styles.managerMenuLeft, { backgroundColor: primaryColor, borderColor: secondaryColor }]} data-testid="manager-menu-dropdown">
           {/* Option Tâches - visible pour admins et staff avec permission tâches */}
-          {/* [APP-FILTER] menu-item-tasks masqué */}
           {/* Option Préparation de Commande - visible pour admins et staff avec permission */}
-          {/* [APP-FILTER] menu-item-order-prep masqué */}
           {/* Option Menu Restaurant - visible pour admins et staff avec permission menu_restaurant */}
-          {/* [APP-FILTER] menu-item-menu-restaurant masqué */}
           {/* Option Menu Restaurant en cours (brouillon) - visible pour admins et staff avec permission menu_restaurant_en_cours */}
-          {/* [APP-FILTER] menu-item-menu-restaurant-draft masqué */}
           {/* Option Menu Client - visible pour admins et staff avec permission menu_client ou menu_restaurant */}
-          {/* [APP-FILTER] menu-item-menu-client masqué */}
           {/* Option Fiche Technique - visible pour admins et staff avec permission fiche_technique */}
-          {/* [APP-FILTER] menu-item-fiche-technique masqué */}
           {/* Option Menu Groupe - visible pour admins et staff avec permission menu_groupe */}
           {hasMenuGroupeAccess() && (
             <TouchableOpacity 
@@ -1996,7 +1687,6 @@ export default function MiseEnPlaceApp() {
             </TouchableOpacity>
           )}
           {/* Option Rapport Ardoise - visible pour admins et staff avec permission ardoise */}
-          {/* [APP-FILTER] menu-item-rapport-ardoise masqué */}
           {/* Option Prestataires - visible pour admins et staff avec permission prestataires */}
           {(user.role === 'admin' || hasPrestatairesAccess()) && (
             <TouchableOpacity 
@@ -2025,41 +1715,9 @@ export default function MiseEnPlaceApp() {
           paddingBottom: 0
         }
       ]} data-testid="main-content">
-        {currentScreen === 'daily' && (
-          <DailyTasksScreen key={`daily-${restaurant?.restaurant_id}`} tasks={dailyTasks} categories={categories} selectedDate={selectedDate}
-            setSelectedDate={(date) => { setSelectedDate(date); loadDailyTasks(undefined, date); loadSubtaskCompletions(date); loadPermanentSubtaskCompletions(date); }}
-            onRefresh={onRefresh} refreshing={refreshing} user={user} primaryColor={primaryColor}
-            secondaryColor={secondaryColor} apiRequest={apiRequest} 
-            loadTasks={() => { loadDailyTasks(undefined, selectedDate); loadSubtaskCompletions(selectedDate); loadPermanentSubtaskCompletions(selectedDate); }}
-            subtasks={subtasks} subtaskCompletions={subtaskCompletions}
-            permanentSubtasks={permanentSubtasks} permanentSubtaskCompletions={permanentSubtaskCompletions}
-            canAddTaches={canAddTaches()} canEditTaches={canEditTaches()} canDeleteTaches={canDeleteTaches()} />
-        )}
-        {currentScreen === 'prepare' && (
-          <PrepareTasksScreen key={`prepare-${restaurant?.restaurant_id}`} templates={taskTemplates} pendingTasks={pendingTasks} categories={categories}
-            prepareDate={prepareDate} setPrepareDate={(date) => { setPrepareDate(date); loadPendingTasks(date); }}
-            primaryColor={primaryColor} secondaryColor={secondaryColor} apiRequest={apiRequest}
-            loadPendingTasks={() => loadPendingTasks()} users={users} user={user}
-            canAddTaches={canAddTaches()} canEditTaches={canEditTaches()} canDeleteTaches={canDeleteTaches()} />
-        )}
-        {currentScreen === 'templates' && (user.role === 'admin' || canAddTacheModeles() || canEditTacheModeles() || canDeleteTacheModeles()) && (
-          <TaskTemplatesScreen key={`templates-${restaurant?.restaurant_id}`} templates={taskTemplates} categories={categories} primaryColor={primaryColor}
-            secondaryColor={secondaryColor} apiRequest={apiRequest} loadTemplates={() => loadTaskTemplates()}
-            canAddModeles={canAddTacheModeles()} canEditModeles={canEditTacheModeles()} canDeleteModeles={canDeleteTacheModeles()} user={user} />
-        )}
-        {currentScreen === 'categories' && (user.role === 'admin' || (canAddTaches() && canEditTaches() && canDeleteTaches())) && (
-          <CategoriesScreen key={`categories-${restaurant?.restaurant_id}`} categories={categories} primaryColor={primaryColor} secondaryColor={secondaryColor}
-            apiRequest={apiRequest} loadCategories={() => loadCategories()} user={user}
-            canAddCategory={canAddTaches()} canEditCategory={canEditTaches()} canDeleteCategory={canDeleteTaches()} />
-        )}
         {currentScreen === 'users' && user.role === 'admin' && (
           <UsersScreen key={`users-${restaurant?.restaurant_id}`} users={users} categories={categories} primaryColor={primaryColor}
             secondaryColor={secondaryColor} apiRequest={apiRequest} loadUsers={() => loadUsers()} allRestaurants={allRestaurants} />
-        )}
-        {currentScreen === 'history' && (
-          <HistoryScreen key={`history-${restaurant?.restaurant_id}`} history={history} tasks={dailyTasks} selectedDate={selectedDate}
-            setSelectedDate={(date) => { setSelectedDate(date); loadDailyTasks(undefined, date); loadHistory(); }}
-            primaryColor={primaryColor} secondaryColor={secondaryColor} onRefresh={loadHistory} />
         )}
         {currentScreen === 'prestataires' && (user.role === 'admin' || hasPrestatairesAccess()) && (
           <PrestatairesScreen 
@@ -2117,180 +1775,6 @@ export default function MiseEnPlaceApp() {
             restaurant={restaurant}
           />
         )}
-        {currentScreen === 'permanentTasks' && user.role === 'admin' && (
-          <PermanentTasksScreen 
-            key={`permanentTasks-${restaurant?.restaurant_id}`}
-            permanentCategories={permanentCategories}
-            permanentTasks={permanentTasks}
-            primaryColor={primaryColor} 
-            secondaryColor={secondaryColor} 
-            apiRequest={apiRequest}
-            loadCategories={loadPermanentCategories}
-            loadTasks={loadPermanentTasks}
-          />
-        )}
-        {currentScreen === 'orderPrep' && (
-          <OrderPreparationScreen 
-            key={`orderPrep-${restaurant?.restaurant_id}`}
-            suppliers={suppliers}
-            products={supplierProducts}
-            orders={supplierOrders}
-            primaryColor={primaryColor} 
-            secondaryColor={secondaryColor} 
-            apiRequest={apiRequest}
-            loadSuppliers={loadSuppliers}
-            loadProducts={loadSupplierProducts}
-            loadOrders={loadSupplierOrders}
-            isAdmin={user.role === 'admin'}
-            sessionToken={sessionToken}
-            userPrepPermissions={user.detailed_permissions?.preparation_commande || {}}
-          />
-        )}
-        {currentScreen === 'ficheTechnique' && hasFicheTechniqueAccess() && (
-          <FicheTechniqueScreen
-            key={`ficheTechnique-${restaurant?.restaurant_id}`}
-            sections={ficheSections}
-            products={ficheProducts}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadSections={loadFicheSections}
-            loadProducts={loadFicheProducts}
-            sessionToken={sessionToken}
-            setCurrentScreen={setCurrentScreen}
-            isManager={isManager()}
-            userFicheTechniqueAccess={getFicheTechniqueAccess()}
-            userFichePermissions={user?.detailed_permissions?.fiche_technique || {}}
-          />
-        )}
-        {currentScreen === 'menuRestaurant' && hasMenuRestaurantAccess() && (
-          <MenuRestaurantScreen
-            key={`menuRestaurant-${restaurant?.restaurant_id}`}
-            sections={menuRestaurantSections}
-            items={menuRestaurantItems}
-            notes={menuRestaurantNotes}
-            ficheProducts={ficheProducts}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadSections={loadMenuRestaurantSections}
-            loadItems={loadMenuRestaurantItems}
-            loadNotes={loadMenuRestaurantNotes}
-            loadFicheProducts={loadFicheProducts}
-            setCurrentScreen={setCurrentScreen}
-            sessionToken={sessionToken}
-            isDraftMode={false}
-            userPermissions={
-              // Menu Restaurant final = lecture seule pour staff, même avec permissions
-              // Seul l'admin peut modifier le menu final
-              user?.role === 'admin' 
-                ? (user?.detailed_permissions?.menu_restaurant || {})
-                : { actif: true } // Staff = lecture seule (pas de boutons d'édition)
-            }
-            isAdmin={user?.role === 'admin'}
-          />
-        )}
-        {currentScreen === 'menuRestaurantDraft' && hasMenuRestaurantDraftAccess() && (
-          <View style={{ flex: 1 }}>
-            {/* Header avec titre et boutons */}
-            <View style={{ backgroundColor: primaryColor, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: secondaryColor, fontSize: 18, fontWeight: 'bold' }}>Menu en cours</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity 
-                  onPress={async () => {
-                    try {
-                      const confirmed = await showConfirm('Régénérer les traductions du menu ?\n\nCette opération peut prendre quelques minutes.');
-                      if (!confirmed) return;
-                      
-                      const response = await fetch(`${API_BASE_URL}/api/public/translations/${restaurant?.restaurant_id}/generate`, {
-                        method: 'POST'
-                      });
-                      
-                      if (response.ok) {
-                        alert('✅ Traductions régénérées avec succès !');
-                      } else {
-                        const error = await response.json();
-                        alert('❌ Erreur: ' + (error.detail || 'Échec de la régénération'));
-                      }
-                    } catch (err: any) {
-                      alert('❌ Erreur: ' + err.message);
-                    }
-                  }}
-                  style={{ backgroundColor: '#9C27B0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                  data-testid="regenerate-translations-btn"
-                >
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>🌐 Traduire</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={publishDraftToMenuRestaurant}
-                  style={{ backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>📤 Publier</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <MenuRestaurantScreen
-              key={`menuRestaurantDraft-${restaurant?.restaurant_id}`}
-              sections={menuRestaurantDraftSections}
-              items={menuRestaurantDraftItems}
-              notes={menuRestaurantNotes}
-              ficheProducts={ficheProducts}
-              primaryColor={primaryColor}
-              secondaryColor={secondaryColor}
-              apiRequest={apiRequest}
-              loadSections={loadMenuRestaurantDraftSections}
-              loadItems={loadMenuRestaurantDraftItems}
-              loadNotes={loadMenuRestaurantNotes}
-              loadFicheProducts={loadFicheProducts}
-              setCurrentScreen={setCurrentScreen}
-              sessionToken={sessionToken}
-              isDraftMode={true}
-              userPermissions={
-                // Pour Menu en cours: si actif, donner les permissions d'édition complètes par défaut
-                user?.detailed_permissions?.menu_restaurant_en_cours?.actif 
-                  ? { 
-                      actif: true, 
-                      section: { ajouter: true, modifier: true, supprimer: true },
-                      produits: { ajouter: true, modifier: true, supprimer: true },
-                      note: true,
-                      export_pdf: true,
-                      export_csv: true
-                    }
-                  : user?.detailed_permissions?.menu_restaurant || {}
-              }
-              isAdmin={user?.role === 'admin'}
-            />
-          </View>
-        )}
-        {currentScreen === 'events' && hasEventsAccess() && (
-          <View style={{ flex: 1, backgroundColor: '#fff' }}>
-            <EventsScreen
-              key={`events-${restaurant?.restaurant_id}`}
-              events={events}
-              selectedEvent={selectedEvent}
-              setSelectedEvent={setSelectedEvent}
-              providers={eventProviders}
-              tasks={eventTasks}
-              menuSections={eventMenuSections}
-              menuItems={eventMenuItems}
-              pricePackages={eventPricePackages}
-              drinkOptions={eventDrinkOptions}
-              users={users}
-              prestataires={prestataires}
-              primaryColor={primaryColor}
-              secondaryColor={secondaryColor}
-              apiRequest={apiRequest}
-              loadEvents={loadEvents}
-              loadEventData={loadEventData}
-              loadPrestataires={loadPrestataires}
-              allRestaurants={allRestaurants}
-              restaurant={restaurant}
-              setShowRestaurantPicker={setShowRestaurantPicker}
-              isAdmin={user?.role === 'admin'}
-              userPermissions={user?.detailed_permissions}
-            />
-          </View>
-        )}
         {currentScreen === 'facturation' && (user.role === 'admin' || hasFacturationAccess()) && (
           <FacturationScreen
             key={`facturation-${restaurant?.restaurant_id}`}
@@ -2306,71 +1790,7 @@ export default function MiseEnPlaceApp() {
             loadMenuRestaurantItems={loadMenuRestaurantItems}
           />
         )}
-        {currentScreen === 'rapportArdoise' && (user.role === 'admin' || hasArdoiseAccess()) && (
-          <RapportArdoiseScreen
-            key={`rapport-ardoise-${restaurant?.restaurant_id}`}
-            ardoiseData={ardoiseData}
-            ardoiseReport={ardoiseReport}
-            ardoiseReportPeriod={ardoiseReportPeriod}
-            setArdoiseReportPeriod={setArdoiseReportPeriod}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadArdoiseData={loadArdoiseData}
-            loadArdoiseReport={loadArdoiseReport}
-            saveArdoiseSales={saveArdoiseSales}
-            updateArdoise={updateArdoise}
-            restaurant={restaurant}
-            showAlert={showAlert}
-            ardoisePermissions={getArdoisePermissions()}
-            onBack={() => setCurrentScreen('daily')}
-          />
-        )}
       </View>
-
-      {/* Bottom navigation - visible uniquement sur les écrans principaux de tâches */}
-      {false && !isMenuGroupeMode && !isOrderPrepMode && currentScreen !== 'ficheTechnique' && currentScreen !== 'menuRestaurant' && currentScreen !== 'menuRestaurantDraft' && currentScreen !== 'events' && currentScreen !== 'facturation' && currentScreen !== 'rapportArdoise' && currentScreen !== 'prestataires' && (
-        <View 
-          style={[
-            styles.bottomNav, 
-            { backgroundColor: primaryColor },
-            Platform.OS === 'web' && {
-              position: 'fixed' as any,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              zIndex: 1000,
-              paddingBottom: 34, // Hauteur approximative de la safe area iOS
-            }
-          ]} 
-          data-testid="bottom-nav"
-        >
-          <TouchableOpacity style={styles.navItem} onPress={() => { setCurrentScreen('daily'); loadDailyTasks(undefined, selectedDate); }} data-testid="nav-tasks">
-            <WebIcon name={currentScreen === 'daily' ? 'today' : 'today-outline'} size={26} color={currentScreen === 'daily' ? secondaryColor : '#888'} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navItem} onPress={() => { setCurrentScreen('prepare'); loadPendingTasks(); loadUsers(); }} data-testid="nav-prepare">
-            <WebIcon name={currentScreen === 'prepare' ? 'send' : 'send-outline'} size={26} color={currentScreen === 'prepare' ? secondaryColor : '#888'} />
-          </TouchableOpacity>
-
-          {(user.role === 'admin' || canAddTacheModeles() || canEditTacheModeles() || canDeleteTacheModeles()) && (
-            <TouchableOpacity style={styles.navItem} onPress={() => setCurrentScreen('templates')} data-testid="nav-templates">
-              <WebIcon name={currentScreen === 'templates' ? 'list' : 'list-outline'} size={26} color={currentScreen === 'templates' ? secondaryColor : '#888'} />
-            </TouchableOpacity>
-          )}
-
-          {/* Categories for admin or staff with full permissions, History for others */}
-          {(user.role === 'admin' || (canAddTaches() && canEditTaches() && canDeleteTaches())) ? (
-            <TouchableOpacity style={styles.navItem} onPress={() => setCurrentScreen('categories')} data-testid="nav-categories">
-              <WebIcon name={currentScreen === 'categories' ? 'grid' : 'grid-outline'} size={26} color={currentScreen === 'categories' ? secondaryColor : '#888'} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.navItem} onPress={() => { setCurrentScreen('history'); loadHistory(); }} data-testid="nav-history">
-              <WebIcon name={currentScreen === 'history' ? 'time' : 'time-outline'} size={26} color={currentScreen === 'history' ? secondaryColor : '#888'} />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
 
       {/* Modal Sélecteur de Restaurant */}
       <Modal visible={showRestaurantPicker} animationType="fade" transparent>
@@ -3139,228 +2559,6 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, user: User, restaur
   );
 }
 
-// ==================== DAILY TASKS SCREEN ====================
-function DailyTasksScreen(_props: any) { return null as any; }
-
-// ==================== PREPARE TASKS SCREEN ====================
-function PrepareTasksScreen(_props: any) { return null as any; }
-
-// ==================== TASK TEMPLATES SCREEN ====================
-function TaskTemplatesScreen(_props: any) { return null as any; }
-
-// ==================== CATEGORIES SCREEN ====================
-function CategoriesScreen({ categories, primaryColor, secondaryColor, apiRequest, loadCategories, user, canAddCategory = false, canEditCategory = false, canDeleteCategory = false }: any) {
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [editCategoryName, setEditCategoryName] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-
-  const addCategory = async () => {
-    if (!newCategoryName.trim()) { 
-      Platform.OS === 'web' ? alert('Veuillez entrer un nom') : showAlert('Erreur', 'Veuillez entrer un nom'); 
-      return; 
-    }
-    setIsAdding(true);
-    try { 
-      await apiRequest('/categories/create', { method: 'POST', body: JSON.stringify({ name: newCategoryName.trim() }) }); 
-      setNewCategoryName(''); 
-      loadCategories();
-      Platform.OS === 'web' ? alert('Catégorie créée !') : showAlert('Succès', 'Catégorie créée !');
-    }
-    catch (error: any) { 
-      Platform.OS === 'web' ? alert(error.message) : showAlert('Erreur', error.message); 
-    }
-    finally { setIsAdding(false); }
-  };
-
-  const openEditModal = (category: Category) => {
-    setEditingCategory(category);
-    setEditCategoryName(category.name);
-  };
-
-  const updateCategory = async () => {
-    if (!editingCategory || !editCategoryName.trim()) return;
-    setIsEditing(true);
-    try {
-      await apiRequest(`/categories/${editingCategory.category_id}`, { 
-        method: 'PUT', 
-        body: JSON.stringify({ name: editCategoryName.trim() }) 
-      });
-      setEditingCategory(null);
-      loadCategories();
-      Platform.OS === 'web' ? alert('Catégorie modifiée !') : showAlert('Succès', 'Catégorie modifiée !');
-    } catch (error: any) { 
-      Platform.OS === 'web' ? alert(error.message) : showAlert('Erreur', error.message); 
-    }
-    finally { setIsEditing(false); }
-  };
-
-  const deleteCategory = async (categoryId: string, categoryName: string) => {
-    const confirmed = Platform.OS === 'web' 
-      ? window.confirm(`Supprimer "${categoryName}" ?`)
-      : await new Promise<boolean>((resolve) => {
-          showAlert('Supprimer', `Supprimer "${categoryName}" ?`, [
-            { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Supprimer', style: 'destructive', onPress: () => resolve(true) },
-          ]);
-        });
-    
-    if (!confirmed) return;
-    try { 
-      await apiRequest(`/categories/${categoryId}`, { method: 'DELETE' }); 
-      loadCategories(); 
-      Platform.OS === 'web' ? alert('Catégorie supprimée !') : null;
-    } catch (e) { 
-      Platform.OS === 'web' ? alert('Impossible de supprimer') : showAlert('Erreur', 'Impossible de supprimer'); 
-    }
-  };
-
-  return (
-    <ScrollView style={styles.screenContainer}>
-      <Text style={[styles.screenTitle, { color: primaryColor }]}>Gérer les catégories</Text>
-      <Text style={[styles.screenSubtitle, { color: '#666' }]}>Ajouter, modifier ou supprimer des catégories</Text>
-      
-      {/* Add new category - conditionné par permission */}
-      {(user?.role === 'admin' || canAddCategory) && (
-      <View style={styles.addCategorySection}>
-        <View style={[styles.addCategoryInput, { borderColor: primaryColor }]}>
-          <TextInput 
-            style={styles.addCategoryTextInput} 
-            placeholder="Nouvelle catégorie" 
-            value={newCategoryName} 
-            onChangeText={setNewCategoryName} 
-          />
-          <TouchableOpacity 
-            style={[styles.addCategoryButton, { backgroundColor: primaryColor }]} 
-            onPress={addCategory} 
-            disabled={isAdding}
-            data-testid="add-category-btn"
-          >
-            {isAdding ? <ActivityIndicator color={secondaryColor} size="small" /> : <WebIcon name="add" size={24} color={secondaryColor} />}
-          </TouchableOpacity>
-        </View>
-      </View>
-      )}
-      
-      {/* Categories list */}
-      <View style={styles.categoriesList}>
-        {categories.length === 0 ? (
-          <Text style={{ color: '#999', textAlign: 'center', marginTop: 20 }}>Aucune catégorie</Text>
-        ) : (
-          categories.map((category: Category, index: number) => (
-            <View key={category.category_id} style={styles.categoryItem}>
-              {/* Flèches pour réorganiser */}
-              <View style={{ flexDirection: 'column', marginRight: 8 }}>
-                <TouchableOpacity 
-                  style={{ padding: 4, opacity: index === 0 ? 0.3 : 1 }}
-                  disabled={index === 0}
-                  onPress={async () => {
-                    if (index === 0) return;
-                    const newOrder = [...categories];
-                    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-                    try {
-                      await apiRequest('/categories/reorder', {
-                        method: 'POST',
-                        body: JSON.stringify({ category_ids: newOrder.map((c: Category) => c.category_id) })
-                      });
-                      loadCategories();
-                    } catch (e) { showAlert('Erreur', 'Impossible de réorganiser'); }
-                  }}
-                  data-testid={`move-up-${category.category_id}`}
-                >
-                  <WebIcon name="chevron-up" size={18} color={primaryColor} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ padding: 4, opacity: index === categories.length - 1 ? 0.3 : 1 }}
-                  disabled={index === categories.length - 1}
-                  onPress={async () => {
-                    if (index === categories.length - 1) return;
-                    const newOrder = [...categories];
-                    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-                    try {
-                      await apiRequest('/categories/reorder', {
-                        method: 'POST',
-                        body: JSON.stringify({ category_ids: newOrder.map((c: Category) => c.category_id) })
-                      });
-                      loadCategories();
-                    } catch (e) { showAlert('Erreur', 'Impossible de réorganiser'); }
-                  }}
-                  data-testid={`move-down-${category.category_id}`}
-                >
-                  <WebIcon name="chevron-down" size={18} color={primaryColor} />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.categoryItemLeft}>
-                <View style={[styles.categoryIcon, { backgroundColor: primaryColor }]}>
-                  <Text style={[styles.categoryIconText, { color: secondaryColor }]}>{index + 1}</Text>
-                </View>
-                <Text style={[styles.categoryItemName, { color: primaryColor }]}>{category.name}</Text>
-              </View>
-              <View style={styles.categoryItemActions}>
-                {/* Bouton Modifier - conditionné par permission */}
-                {(user?.role === 'admin' || canEditCategory) && (
-                <TouchableOpacity 
-                  style={[styles.categoryEditButton, { marginRight: 8 }]} 
-                  onPress={() => openEditModal(category)}
-                  data-testid={`edit-category-${category.category_id}`}
-                >
-                  <WebIcon name="pencil-outline" size={20} color={primaryColor} />
-                </TouchableOpacity>
-                )}
-                {/* Bouton Supprimer - conditionné par permission */}
-                {(user?.role === 'admin' || canDeleteCategory) && (
-                <TouchableOpacity 
-                  style={styles.categoryDeleteButton} 
-                  onPress={() => deleteCategory(category.category_id, category.name)}
-                  data-testid={`delete-category-${category.category_id}`}
-                >
-                  <WebIcon name="trash-outline" size={20} color="#ff4444" />
-                </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ))
-        )}
-      </View>
-
-      {/* Edit Category Modal */}
-      <Modal visible={editingCategory !== null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 400 }]}>
-            <View style={[styles.modalHeader, { backgroundColor: primaryColor }]}>
-              <Text style={[styles.modalTitle, { color: secondaryColor }]}>Modifier la catégorie</Text>
-              <TouchableOpacity onPress={() => setEditingCategory(null)}>
-                <WebIcon name="close" size={24} color={secondaryColor} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <Text style={[styles.inputLabel, { color: primaryColor }]}>Nom de la catégorie</Text>
-              <TextInput
-                style={[styles.modalInput, { borderColor: primaryColor }]}
-                value={editCategoryName}
-                onChangeText={setEditCategoryName}
-                placeholder="Nom de la catégorie"
-              />
-              <TouchableOpacity 
-                style={[styles.modalSubmitButton, { backgroundColor: primaryColor, marginTop: 16 }]} 
-                onPress={updateCategory}
-                disabled={isEditing}
-              >
-                {isEditing ? (
-                  <ActivityIndicator color={secondaryColor} size="small" />
-                ) : (
-                  <Text style={[styles.modalSubmitButtonText, { color: secondaryColor }]}>Enregistrer</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </ScrollView>
-  );
-}
 
 // ==================== USERS SCREEN ====================
 function UsersScreen({ users, categories, primaryColor, secondaryColor, apiRequest, loadUsers, allRestaurants = [] }: any) {
@@ -5175,39 +4373,6 @@ function SuperAdminScreen({ restaurants, users, stats, apiRequest, loadData }: a
   );
 }
 
-// ==================== HISTORY SCREEN ====================
-function HistoryScreen({ history, tasks, selectedDate, setSelectedDate, primaryColor, secondaryColor, onRefresh }: any) {
-  const getTaskTitle = (taskId: string) => { if (taskId === 'batch_send') return 'Envoi des tâches'; return tasks.find((t: DailyTask) => t.task_id === taskId)?.title || 'Tâche'; };
-  const getActionText = (action: string) => { if (action.startsWith('sent_tasks_')) return 'a envoyé les tâches'; switch (action) { case 'completed': return 'a terminé'; default: return action; } };
-  const formatTimestamp = (timestamp: string) => new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-
-  return (
-    <ScrollView style={styles.screenContainer}>
-      <View style={styles.dateSelector}>
-        <TouchableOpacity style={styles.dateArrow} onPress={() => setSelectedDate(addDays(selectedDate, -1))}><WebIcon name="chevron-back" size={24} color={primaryColor} /></TouchableOpacity>
-        <View style={styles.dateDisplay}><Text style={[styles.dateText, { color: primaryColor }]}>{formatDate(selectedDate)}</Text>{selectedDate === getTodayDate() && <Text style={[styles.todayBadge, { backgroundColor: primaryColor, color: secondaryColor }]}>Aujourd'hui</Text>}</View>
-        <TouchableOpacity style={styles.dateArrow} onPress={() => setSelectedDate(addDays(selectedDate, 1))}><WebIcon name="chevron-forward" size={24} color={primaryColor} /></TouchableOpacity>
-      </View>
-      <Text style={[styles.screenTitle, { color: primaryColor }]}>Historique</Text>
-      {history.length === 0 ? (
-        <View style={styles.emptyState}><WebIcon name="time-outline" size={64} color="#ccc" /><Text style={styles.emptyStateText}>Aucune activité</Text></View>
-      ) : (
-        <View style={styles.historyList}>
-          {history.map((item: TaskHistory) => (
-            <View key={item.history_id} style={styles.historyItem}>
-              <View style={[styles.historyDot, { backgroundColor: primaryColor }]} />
-              <View style={styles.historyContent}>
-                <Text style={styles.historyText}><Text style={[styles.historyUserName, { color: primaryColor }]}>{item.user_name}</Text> {getActionText(item.action)} {item.task_id !== 'batch_send' && <Text style={styles.historyTaskTitle}>"{getTaskTitle(item.task_id)}"</Text>}</Text>
-                <Text style={styles.historyTime}>{formatTimestamp(item.timestamp)}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-    </ScrollView>
-  );
-}
-
 // ==================== SETTINGS SCREEN ====================
 function SettingsScreen({ restaurant, primaryColor, secondaryColor, apiRequest, onUpdate, onNavigateToCategories, onNavigateToUsers, currentUser }: any) {
   const [name, setName] = useState(restaurant.name);
@@ -5682,9 +4847,6 @@ function SettingsScreen({ restaurant, primaryColor, secondaryColor, apiRequest, 
   );
 }
 
-// ==================== PERMANENT TASKS SCREEN ====================
-function PermanentTasksScreen(_props: any) { return null as any; }
-
 // ==================== MENU GROUPE SCREEN ====================
 function MenuGroupeScreen({ sections, items, reservations, primaryColor, secondaryColor, apiRequest, loadSections, loadItems, loadReservations, onCreateGroup, restaurant, sessionToken }: any) {
   const [activeTab, setActiveTab] = useState<'sections' | 'reservations' | 'options'>('reservations');
@@ -5899,7 +5061,7 @@ function MenuGroupeScreen({ sections, items, reservations, primaryColor, seconda
         }
         showAlert('Succès', message);
         // Recharger les réservations pour mettre à jour le statut
-        loadGroupReservations();
+        loadReservations();
       } else {
         showAlert('Erreur Zelty', result.detail || 'Erreur lors de l\'envoi à la caisse');
       }
@@ -8727,9 +7889,6 @@ function CreateGroupScreen({ sections, items, primaryColor, secondaryColor, apiR
   );
 }
 
-// ==================== CLIENT MENU SELECTION SCREEN (Public) ====================
-function ClientMenuSelectionScreen(_props: any) { return null as any; }
-
 // ==================== PUBLIC GROUP REQUEST SCREEN (Formulaire public de demande de réservation) ====================
 
 // ==================== STAFF GROUP VIEW SCREEN (Vue staff après scan QR) ====================
@@ -9921,384 +9080,6 @@ function TrackGroupReservationScreen({ token, onClose }: { token: string; onClos
     </SafeAreaWrapper>
   );
 }
-
-// ==================== PUBLIC MENU SCREEN (QR Code) ====================
-function PublicMenuScreen(_props: any) { return null as any; }
-
-// ==================== FICHE TECHNIQUE SCREEN ====================
-function FicheTechniqueScreen(_props: any) { return null as any; }
-
-// ==================== MENU RESTAURANT SCREEN ====================
-// Design avec couleurs distinctives et bonne visibilité
-// Palette de couleurs contrastées pour les différents niveaux
-const MENU_COLORS = {
-  // Sections principales - RAL 5008 (Grey Blue / Bleu gris)
-  sectionFood: '#37474F',        // RAL 5008 - Bleu gris foncé pour sections Food
-  sectionBoisson: '#37474F',     // RAL 5008 - Bleu gris foncé pour sections Boisson
-  // Sous-sections (moyennes)
-  subSection: '#5B5EA6',       // Violet/Indigo
-  // Items
-  itemName: '#1A1A2E',         // Noir profond
-  itemDesc: '#8B4513',         // Marron (SaddleBrown) - pour différencier des noms de plats
-  itemPrice: '#D4AF37',        // Or/Doré
-  // Suggestions/Succession
-  suggestion: '#C84B31',       // Rouge brique
-  // Happy Hour
-  happyHour: '#FF6B35',        // Orange vif
-  // Suppléments
-  supplement: '#6B4226',       // Marron foncé
-  // Notes
-  note: '#8B0000',             // Rouge foncé
-};
-
-function MenuRestaurantScreen(_props: any) { return null as any; }
-
-// Styles spécifiques pour Menu Restaurant
-const menuRestaurantStyles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  backButton: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },
-  backText: { fontSize: 16, marginLeft: 4 },
-  screenTitle: { fontSize: 22, fontWeight: 'bold' },
-  
-  // Dropdown styles (replacing tabs)
-  dropdownButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 14, 
-    borderRadius: 10 
-  },
-  dropdownButtonText: { fontSize: 18, fontWeight: '600', color: 'white' },
-  dropdownMenu: { 
-    position: 'absolute', 
-    top: '100%', 
-    left: 0, 
-    right: 0, 
-    backgroundColor: 'white', 
-    borderRadius: 10, 
-    marginTop: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5
-  },
-  dropdownItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 14, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#EEE' 
-  },
-  dropdownItemActive: { backgroundColor: '#F5F5F5' },
-  dropdownItemText: { fontSize: 16, color: '#333' },
-  
-  // Choice modal styles
-  choiceButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 10,
-    gap: 12
-  },
-  choiceButtonText: { fontSize: 16, fontWeight: '600', color: 'white' },
-  
-  // Old tab styles (kept for compatibility)
-  tabContainer: { flexDirection: 'row', marginBottom: 16, borderRadius: 12, overflow: 'hidden', backgroundColor: '#E0E0E0' },
-  tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  tabText: { fontSize: 16, fontWeight: '600', color: '#333' },
-  
-  actionRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  addButton: { flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, alignItems: 'center' },
-  addButtonText: { color: 'white', fontWeight: '600', fontSize: 15 },
-  
-  // ========== ARDOISE STYLES ==========
-  ardoiseContainer: {
-    backgroundColor: '#2d3436',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16
-  },
-  ardoiseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 8
-  },
-  ardoiseTitle: {
-    color: '#ffd166',
-    fontSize: 20,
-    fontWeight: 'bold',
-    letterSpacing: 1
-  },
-  ardoiseActionBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6
-  },
-  ardoiseSection: {
-    marginBottom: 12
-  },
-  ardoiseSectionTitle: {
-    color: '#ffd166',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,209,102,0.3)',
-    paddingBottom: 4
-  },
-  ardoiseItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 8
-  },
-  ardoiseItemName: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '500'
-  },
-  ardoiseItemDesc: {
-    color: '#b2bec3',
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginTop: 2
-  },
-  ardoiseItemPrice: {
-    color: '#ffd166',
-    fontSize: 15,
-    fontWeight: '600'
-  },
-  ardoiseHint: {
-    color: '#636e72',
-    fontSize: 11,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 12
-  },
-  
-  menuContent: { marginBottom: 20 },
-  
-  sectionHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 14, 
-    borderRadius: 10, 
-    marginBottom: 8 
-  },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: 'white' },
-  sectionActionBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  
-  happyHourBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginTop: 4, alignSelf: 'flex-start' },
-  happyHourBadgeText: { fontSize: 11, color: 'white', fontWeight: '600' },
-  
-  itemContainer: { 
-    backgroundColor: 'white', 
-    padding: 12, 
-    marginBottom: 6, 
-    borderRadius: 8, 
-    marginLeft: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#DDD'
-  },
-  itemRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  itemName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  itemDesc: { fontSize: 14, lineHeight: 18 },
-  itemPrice: { fontSize: 16, fontWeight: 'bold' },
-  itemActionBtn: { padding: 6, backgroundColor: '#F5F5F5', borderRadius: 6 },
-  
-  formatName: { fontSize: 12, color: '#888' },
-  happyHourPrice: { fontSize: 12, fontStyle: 'italic' },
-  
-  // Happy Hour Table Styles
-  happyHourTable: {
-    marginTop: 12,
-    marginLeft: 16,
-    backgroundColor: '#FFF5EB',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#FF6B35'
-  },
-  happyHourTableHeader: {
-    backgroundColor: '#FF6B35',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  happyHourTableTitle: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14
-  },
-  happyHourTableBody: {
-    padding: 12
-  },
-  happyHourTableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFD5C0'
-  },
-  happyHourItemName: {
-    fontSize: 13,
-    color: '#333',
-    flex: 1
-  },
-  happyHourPriceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  happyHourOriginalPrice: {
-    fontSize: 12,
-    color: '#999',
-    textDecorationLine: 'line-through'
-  },
-  happyHourNewPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FF6B35'
-  },
-  
-  suggestionContainer: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#EEE' },
-  suggestionText: { fontSize: 13, fontWeight: '500', fontStyle: 'italic' },
-  
-  supplementContainer: { marginTop: 6, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  supplementLabel: { fontSize: 12, fontWeight: '600' },
-  supplementText: { fontSize: 12 },
-  
-  notesSection: { marginTop: 20, paddingTop: 16, borderTopWidth: 2, borderTopColor: '#DDD' },
-  notesSectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
-  noteContainer: { 
-    backgroundColor: '#FFF9F0', 
-    padding: 12, 
-    borderRadius: 8, 
-    marginBottom: 8,
-    borderLeftWidth: 4,
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  noteText: { flex: 1, fontSize: 14, fontWeight: '500' },
-  noteDeleteBtn: { padding: 4 },
-  
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { fontSize: 16, color: '#999', marginBottom: 8 },
-  emptyHint: { fontSize: 14, color: '#BBB' },
-  
-  parentOption: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 8, 
-    borderRadius: 20, 
-    backgroundColor: '#E8E8E8',
-    marginRight: 8 
-  },
-  parentOptionSelected: { backgroundColor: '#333' },
-  parentOptionText: { fontSize: 14, color: '#333' },
-  
-  happyHourToggle: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  checkbox: { 
-    width: 24, 
-    height: 24, 
-    borderRadius: 6, 
-    borderWidth: 2, 
-    borderColor: '#999',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  
-  formatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  formatInput: { 
-    borderWidth: 1, 
-    borderColor: '#CCC', 
-    borderRadius: 8, 
-    paddingHorizontal: 12, 
-    paddingVertical: 10,
-    fontSize: 14,
-    backgroundColor: 'white'
-  },
-  
-  addRowButton: { 
-    borderWidth: 1, 
-    borderColor: '#999', 
-    borderStyle: 'dashed', 
-    borderRadius: 8, 
-    paddingVertical: 10, 
-    alignItems: 'center',
-    marginTop: 4
-  },
-  addRowButtonText: { fontSize: 14, color: '#666' },
-  
-  // Export buttons
-  exportRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16
-  },
-  exportButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8
-  },
-  exportButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 13
-  },
-  
-  ficheSearchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    marginBottom: 8
-  },
-  ficheSearchContainer: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12
-  },
-  ficheSearchInput: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-    backgroundColor: 'white'
-  },
-  ficheSearchItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE'
-  }
-});
-
-// ==================== MENU RESTAURANT DRAFT SCREEN ====================
-function MenuRestaurantDraftScreen(_props: any) { return null as any; }
-
-// ==================== ORDER PREPARATION SCREEN ====================
-function OrderPreparationScreen(_props: any) { return null as any; }
 
 // ==================== HELPER FUNCTIONS ====================
 function getTodayDate(): string { return new Date().toISOString().split('T')[0]; }
@@ -12756,8 +11537,6 @@ function FacturationScreen({ invoices, menuRestaurantSections, menuRestaurantIte
   );
 }
 
-// ==================== RAPPORT ARDOISE SCREEN ====================
-function RapportArdoiseScreen(_props: any) { return null as any; }
 
 // ==================== STYLES ====================
 const styles = StyleSheet.create({
