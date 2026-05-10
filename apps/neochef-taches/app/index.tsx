@@ -373,19 +373,9 @@ const API_URL = `${API_BASE_URL}/api`;
 
 interface Restaurant { restaurant_id: string; name: string; description: string | null; logo_base64: string | null; primary_color: string; secondary_color: string; }
 interface UserPermissions { 
-  menu_groupe: boolean; 
   taches: boolean; 
   preparation_commande: boolean; 
-  fiche_technique: boolean; 
-  fiche_technique_access: 'none' | 'bar' | 'cuisine' | 'both'; 
   categories: string[];
-  menu_restaurant?: boolean;
-  events?: boolean;
-  evenements?: boolean;
-  facturation?: boolean;
-  prestataires?: boolean;
-  menu_client?: boolean;
-  menu_restaurant_en_cours?: boolean;
 }
 interface User { user_id: string; email: string; name: string; role: 'admin' | 'staff' | 'holding'; restaurant_id: string | null; restaurant_ids?: string[]; holding_name?: string; assigned_categories: string[]; permissions?: UserPermissions; notification_prefs: { push: boolean; email: boolean; sms: boolean; }; }
 interface Category { category_id: string; name: string; order: number; }
@@ -393,12 +383,6 @@ interface TaskTemplate { template_id: string; category_id: string; title: string
 interface Subtask { subtask_id: string; parent_template_id: string; name: string; quantity?: number; is_active: boolean; }
 interface DailyTask { task_id: string; template_id?: string; category_id?: string; title: string; description?: string; date: string; status: 'pending' | 'completed'; is_recurring: boolean; is_sent: boolean; assigned_user_id?: string; assigned_user_name?: string; completed_by?: string; completed_at?: string; is_permanent?: boolean; permanent_task_id?: string; permanent_category_id?: string; permanent_category_name?: string; }
 interface TaskHistory { history_id: string; task_id: string; user_id: string; user_name: string; action: string; timestamp: string; }
-
-// Menu Groupe Interfaces
-interface MenuSection { section_id: string; name: string; description?: string; order: number; price?: number; }
-interface MenuItem { item_id: string; section_id: string; name: string; description?: string; order: number; cooking_options?: string[]; requires_cooking_choice?: boolean; }
-interface GroupReservation { reservation_id: string; client_name: string; client_surname: string; client_email?: string; client_phone?: string; num_people: number; date: string; time: string; selected_sections: string[]; selected_items: {[key: string]: string[]}; price_per_person?: number; client_token: string; client_selections?: any; status: string; client_link?: string; proposal_status?: string; is_credit_client?: boolean; }
-interface Prestataire { prestataire_id: string; restaurant_id: string; nom_societe: string; contact?: string; telephone?: string; email?: string; note?: string; tarifs?: string; created_at?: string; updated_at?: string; }
 
 const DEFAULT_PRIMARY = '#2C5F2D';
 const DEFAULT_SECONDARY = '#EAE6CA';
@@ -489,14 +473,13 @@ export default function MiseEnPlaceApp() {
   const [user, setUser] = useState<User | null>(null);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentScreen, setCurrentScreen] = useState<'daily' | 'templates' | 'prepare' | 'categories' | 'users' | 'settings' | 'history' | 'menuGroupe' | 'createGroup' | 'permanentTasks' | 'orderPrep' | 'ficheTechnique' | 'menuRestaurant' | 'events' | 'facturation' | 'rapportArdoise' | 'prestataires' | 'superadmin'>('daily');
+  const [currentScreen, setCurrentScreen] = useState<'daily' | 'templates' | 'prepare' | 'categories' | 'users' | 'settings' | 'history' | 'permanentTasks' | 'orderPrep' | 'superadmin'>('daily');
   const [categories, setCategories] = useState<Category[]>([]);
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([]);
   const [pendingTasks, setPendingTasks] = useState<DailyTask[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [history, setHistory] = useState<TaskHistory[]>([]);
-  const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [prepareDate, setPrepareDate] = useState(getTomorrowDate());
@@ -506,10 +489,6 @@ export default function MiseEnPlaceApp() {
   const [allUsersAdmin, setAllUsersAdmin] = useState<any[]>([]);
   const [superadminStats, setSuperadminStats] = useState<any>(null);
   
-  // Menu Groupe State
-  const [menuSections, setMenuSections] = useState<MenuSection[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [groupReservations, setGroupReservations] = useState<GroupReservation[]>([]);
   const [showManagerMenu, setShowManagerMenu] = useState(false);
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   
@@ -530,50 +509,6 @@ export default function MiseEnPlaceApp() {
   const [supplierProducts, setSupplierProducts] = useState<any[]>([]);
   const [supplierOrders, setSupplierOrders] = useState<any[]>([]);
   
-  // Fiche Technique State
-  const [ficheSections, setFicheSections] = useState<any[]>([]);
-  const [ficheProducts, setFicheProducts] = useState<any[]>([]);
-  
-  // Menu Restaurant State (Carte Food & Carte Boisson)
-  const [menuRestaurantSections, setMenuRestaurantSections] = useState<any[]>([]);
-  const [menuRestaurantItems, setMenuRestaurantItems] = useState<any[]>([]);
-  const [menuRestaurantNotes, setMenuRestaurantNotes] = useState<any[]>([]);
-  
-  // Menu Restaurant en cours (Brouillon/Draft) State
-  const [menuRestaurantDraftSections, setMenuRestaurantDraftSections] = useState<any[]>([]);
-  const [menuRestaurantDraftItems, setMenuRestaurantDraftItems] = useState<any[]>([]);
-  const [menuRestaurantDraftNotes, setMenuRestaurantDraftNotes] = useState<any[]>([]);
-  const [isDraftModified, setIsDraftModified] = useState(false);
-  
-  // Events State (Module Événements)
-  const [events, setEvents] = useState<any[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
-  const [eventProviders, setEventProviders] = useState<any[]>([]);
-  const [eventTasks, setEventTasks] = useState<any[]>([]);
-  const [eventMenuSections, setEventMenuSections] = useState<any[]>([]);
-  const [eventMenuItems, setEventMenuItems] = useState<any[]>([]);
-  const [eventPricePackages, setEventPricePackages] = useState<any[]>([]);
-  const [eventDrinkOptions, setEventDrinkOptions] = useState<any[]>([]);
-  
-  // Facturation State (Devis et Factures)
-  const [invoices, setInvoices] = useState<any[]>([]);
-  
-  // Ardoise State (Rapport des ventes)
-  const [ardoiseData, setArdoiseData] = useState<any>(null);
-  const [ardoiseSalesHistory, setArdoiseSalesHistory] = useState<any[]>([]);
-  const [ardoiseReportPeriod, setArdoiseReportPeriod] = useState<'week' | 'month' | 'year'>('week');
-  const [ardoiseReport, setArdoiseReport] = useState<any>(null);
-  
-  // État pour la page client publique
-  const [groupToken, setGroupToken] = useState<string | null>(null);
-  // État pour afficher la vue staff quand groupToken est présent
-  const [showStaffGroupView, setShowStaffGroupView] = useState(false);
-  // État pour le formulaire public de demande de groupe
-  const [publicGroupRequestRestaurantId, setPublicGroupRequestRestaurantId] = useState<string | null>(null);
-  // État pour le suivi de réservation client
-  const [trackGroupToken, setTrackGroupToken] = useState<string | null>(null);
-  // État pour le menu public (QR code)
-  const [publicMenuRestaurantId, setPublicMenuRestaurantId] = useState<string | null>(null);
   
   // Multi-Restaurant State
   const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
@@ -663,7 +598,7 @@ export default function MiseEnPlaceApp() {
   
   // Update bottom safe area color based on current screen (for screens without bottom nav)
   useEffect(() => {
-    const screensWithoutBottomNav = ['ficheTechnique', 'menuRestaurant', 'menuRestaurantDraft', 'events', 'facturation', 'rapportArdoise', 'menuGroupe', 'orderPrep'];
+    const screensWithoutBottomNav = ['orderPrep'];
     const needsBottomCover = screensWithoutBottomNav.includes(currentScreen);
     
     if (needsBottomCover && secondaryColor) {
@@ -683,44 +618,13 @@ export default function MiseEnPlaceApp() {
     return response.json();
   };
 
-  // Check for group_token in URL on mount
+  // Check for URL params on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      
-      // Check for group_token (sélection menu client existant)
-      const gToken = urlParams.get('group_token');
-      if (gToken) {
-        setGroupToken(gToken);
-        // Ne PAS faire return - continuer pour charger la session si elle existe
+      // Clean any old params
+      if (urlParams.has('group_token') || urlParams.has('group_request') || urlParams.has('track_group') || urlParams.has('menu')) {
         window.history.replaceState({}, document.title, window.location.pathname);
-      }
-      
-      // Check for group_request (formulaire public de demande de réservation)
-      const groupRequestRestId = urlParams.get('group_request');
-      if (groupRequestRestId) {
-        setPublicGroupRequestRestaurantId(groupRequestRestId);
-        setIsLoading(false);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return;
-      }
-      
-      // Check for track_group (suivi de réservation par le client)
-      const trackToken = urlParams.get('track_group');
-      if (trackToken) {
-        setTrackGroupToken(trackToken);
-        setIsLoading(false);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return;
-      }
-      
-      // Check for menu (menu public QR code)
-      const menuRestId = urlParams.get('menu');
-      if (menuRestId) {
-        setPublicMenuRestaurantId(menuRestId);
-        setIsLoading(false);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return;
       }
     }
     loadSession();
@@ -799,12 +703,6 @@ export default function MiseEnPlaceApp() {
     catch (error) { console.error('Error loading history:', error); }
   };
 
-  // Prestataires Functions
-  const loadPrestataires = async () => {
-    try { const data = await apiRequest('/prestataires/list'); setPrestataires(data || []); }
-    catch (error) { console.error('Error loading prestataires:', error); setPrestataires([]); }
-  };
-
   // Super Admin Functions
   const loadSuperadminData = async () => {
     try {
@@ -819,22 +717,6 @@ export default function MiseEnPlaceApp() {
     } catch (error) {
       console.error('Error loading superadmin data:', error);
     }
-  };
-
-  // Menu Groupe Functions
-  const loadMenuSections = async (token?: string) => {
-    try { const data = await apiRequest('/menu-sections/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setMenuSections(data); }
-    catch (error) { console.error('Error loading menu sections:', error); }
-  };
-
-  const loadMenuItems = async (token?: string) => {
-    try { const data = await apiRequest('/menu-items/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setMenuItems(data); }
-    catch (error) { console.error('Error loading menu items:', error); }
-  };
-
-  const loadGroupReservations = async (token?: string) => {
-    try { const data = await apiRequest('/group-reservations/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setGroupReservations(data); }
-    catch (error) { console.error('Error loading group reservations:', error); }
   };
 
   // Permanent Tasks Functions
@@ -911,215 +793,6 @@ export default function MiseEnPlaceApp() {
     catch (error) { console.error('Error loading supplier orders:', error); }
   };
 
-  // Fiche Technique Functions
-  const loadFicheSections = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/fiche-sections/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setFicheSections(data); 
-    }
-    catch (error) { console.error('Error loading fiche sections:', error); }
-  };
-
-  const loadFicheProducts = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/fiche-products/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setFicheProducts(data); 
-    }
-    catch (error) { console.error('Error loading fiche products:', error); }
-  };
-
-  // Menu Restaurant Functions (Carte Food & Carte Boisson)
-  const loadMenuRestaurantSections = async (token?: string) => {
-    try { 
-      console.log('[LOAD] Loading menu restaurant sections...');
-      const data = await apiRequest('/menu-restaurant/sections/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      console.log('[LOAD] Menu restaurant sections loaded:', data?.length || 0, 'sections');
-      setMenuRestaurantSections(data); 
-    }
-    catch (error) { console.error('Error loading menu restaurant sections:', error); }
-  };
-
-  const loadMenuRestaurantItems = async (token?: string) => {
-    try { 
-      console.log('[LOAD] Loading menu restaurant items...');
-      const data = await apiRequest('/menu-restaurant/items/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      console.log('[LOAD] Menu restaurant items loaded:', data?.length || 0, 'items');
-      setMenuRestaurantItems(data); 
-    }
-    catch (error) { console.error('Error loading menu restaurant items:', error); }
-  };
-
-  const loadMenuRestaurantNotes = async (token?: string) => {
-    try { 
-      const data = await apiRequest('/menu-restaurant/notes/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); 
-      setMenuRestaurantNotes(data); 
-    }
-    catch (error) { console.error('Error loading menu restaurant notes:', error); }
-  };
-
-  // Menu Restaurant Draft (Brouillon) Functions
-  const loadMenuRestaurantDraftSections = async () => {
-    try { 
-      console.log('[LOAD] Loading menu restaurant draft sections...');
-      const data = await apiRequest('/menu-restaurant-draft/sections/list'); 
-      console.log('[LOAD] Menu restaurant draft sections loaded:', data?.length || 0, 'sections');
-      setMenuRestaurantDraftSections(data || []); 
-      return data || [];
-    }
-    catch (error) { 
-      console.error('Error loading menu restaurant draft sections:', error); 
-      setMenuRestaurantDraftSections([]);
-      return [];
-    }
-  };
-
-  const loadMenuRestaurantDraftItems = async () => {
-    try { 
-      console.log('[LOAD] Loading menu restaurant draft items...');
-      const data = await apiRequest('/menu-restaurant-draft/items/list'); 
-      console.log('[LOAD] Menu restaurant draft items loaded:', data?.length || 0, 'items');
-      setMenuRestaurantDraftItems(data || []); 
-      return data || [];
-    }
-    catch (error) { 
-      console.error('Error loading menu restaurant draft items:', error); 
-      setMenuRestaurantDraftItems([]);
-      return [];
-    }
-  };
-  
-  // Charger et initialiser automatiquement le brouillon s'il est vide
-  const loadAndInitializeDraftIfEmpty = async () => {
-    try {
-      console.log('[DRAFT] Checking draft status...');
-      const sections = await apiRequest('/menu-restaurant-draft/sections/list');
-      const items = await apiRequest('/menu-restaurant-draft/items/list');
-      
-      if ((!sections || sections.length === 0) && (!items || items.length === 0)) {
-        console.log('[DRAFT] Draft is empty, initializing from main menu...');
-        await apiRequest('/menu-restaurant-draft/initialize', { method: 'POST' });
-        // Recharger après initialisation
-        const newSections = await apiRequest('/menu-restaurant-draft/sections/list');
-        const newItems = await apiRequest('/menu-restaurant-draft/items/list');
-        setMenuRestaurantDraftSections(newSections || []);
-        setMenuRestaurantDraftItems(newItems || []);
-        console.log('[DRAFT] Draft initialized with', newSections?.length || 0, 'sections and', newItems?.length || 0, 'items');
-      } else {
-        setMenuRestaurantDraftSections(sections || []);
-        setMenuRestaurantDraftItems(items || []);
-        console.log('[DRAFT] Draft already has data:', sections?.length || 0, 'sections,', items?.length || 0, 'items');
-      }
-    } catch (error) {
-      console.error('[DRAFT] Error loading/initializing draft:', error);
-    }
-  };
-
-  const publishDraftToMenuRestaurant = async () => {
-    try {
-      await apiRequest('/menu-restaurant-draft/publish', { method: 'POST' });
-      showAlert('Succès', 'Le menu a été mis à jour avec succès !');
-      // Recharger les données
-      loadMenuRestaurantSections();
-      loadMenuRestaurantItems();
-      setIsDraftModified(false);
-    } catch (error) {
-      console.error('Error publishing draft:', error);
-      showAlert('Erreur', 'Impossible de publier les modifications');
-    }
-  };
-
-  const initializeDraftFromMenuRestaurant = async () => {
-    try {
-      await apiRequest('/menu-restaurant-draft/initialize', { method: 'POST' });
-      showAlert('Succès', 'Le brouillon a été initialisé depuis le menu actuel');
-      loadMenuRestaurantDraftSections();
-      loadMenuRestaurantDraftItems();
-    } catch (error) {
-      console.error('Error initializing draft:', error);
-      showAlert('Erreur', 'Impossible d\'initialiser le brouillon');
-    }
-  };
-
-  // Events Functions (Module Événements)
-  const loadEvents = async () => {
-    try {
-      const data = await apiRequest('/events');
-      setEvents(data);
-    } catch (error) { console.error('Error loading events:', error); }
-  };
-
-  const loadEventData = async (eventId: string) => {
-    try {
-      const [providers, tasks, sections, items, packages, drinks] = await Promise.all([
-        apiRequest(`/events/${eventId}/providers`),
-        apiRequest(`/events/${eventId}/tasks`),
-        apiRequest(`/events/${eventId}/menu/sections`),
-        apiRequest(`/events/${eventId}/menu/items`),
-        apiRequest(`/events/${eventId}/menu/packages`),
-        apiRequest(`/events/${eventId}/menu/drinks`)
-      ]);
-      setEventProviders(providers);
-      setEventTasks(tasks);
-      setEventMenuSections(sections);
-      setEventMenuItems(items);
-      setEventPricePackages(packages);
-      setEventDrinkOptions(drinks);
-    } catch (error) { console.error('Error loading event data:', error); }
-  };
-
-  // Facturation Functions
-  const loadInvoices = async () => {
-    try {
-      const data = await apiRequest('/invoices/list');
-      setInvoices(data);
-    } catch (error) { console.error('Error loading invoices:', error); }
-  };
-
-  // Ardoise Functions (Rapport des ventes)
-  const loadArdoiseData = async () => {
-    try {
-      const data = await apiRequest('/ardoise/by-restaurant/' + restaurant.restaurant_id);
-      setArdoiseData(data);
-      // Also load report
-      loadArdoiseReport();
-    } catch (error) { console.error('Error loading ardoise:', error); }
-  };
-
-  const loadArdoiseReport = async () => {
-    try {
-      const data = await apiRequest('/ardoise/sales/report/' + restaurant.restaurant_id + '?period=' + ardoiseReportPeriod);
-      setArdoiseReport(data);
-    } catch (error) { console.error('Error loading ardoise report:', error); }
-  };
-
-  const saveArdoiseSales = async (salesData: any) => {
-    try {
-      await apiRequest('/ardoise/sales/' + restaurant.restaurant_id, {
-        method: 'POST',
-        body: JSON.stringify(salesData)
-      });
-      showAlert('Succès', 'Ventes enregistrées avec succès');
-      loadArdoiseReport();
-    } catch (error) { 
-      console.error('Error saving ardoise sales:', error);
-      showAlert('Erreur', 'Erreur lors de l\'enregistrement des ventes');
-    }
-  };
-
-  const updateArdoise = async (ardoiseUpdate: any) => {
-    try {
-      await apiRequest('/ardoise/' + restaurant.restaurant_id, {
-        method: 'PUT',
-        body: JSON.stringify(ardoiseUpdate)
-      });
-      showAlert('Succès', 'Ardoise mise à jour');
-      loadArdoiseData();
-    } catch (error) { 
-      console.error('Error updating ardoise:', error);
-      showAlert('Erreur', 'Erreur lors de la mise à jour');
-    }
-  };
-
   // Multi-Restaurant Functions
   const loadMyRestaurants = async (token?: string) => {
     try { 
@@ -1155,29 +828,9 @@ export default function MiseEnPlaceApp() {
       setPermanentTasks([]);
       setPermanentSubtasks([]);
       setPermanentSubtaskCompletions([]);
-      setMenuSections([]);
-      setMenuItems([]);
-      setGroupReservations([]);
-      setMenuRestaurantSections([]);
-      setMenuRestaurantItems([]);
-      setMenuRestaurantNotes([]);
-      setFicheSections([]);
-      setFicheProducts([]);
       setSuppliers([]);
       setSupplierProducts([]);
       setSupplierOrders([]);
-      setEvents([]);
-      setSelectedEvent(null);
-      setEventProviders([]);
-      setArdoiseData(null);
-      setArdoiseSalesHistory([]);
-      setArdoiseReport(null);
-      setEventTasks([]);
-      setEventMenuSections([]);
-      setEventMenuItems([]);
-      setEventPricePackages([]);
-      setEventDrinkOptions([]);
-      setInvoices([]);
       
       // Recharger TOUTES les données du nouveau restaurant
       console.log('[SWITCH] Loading all data for new restaurant...');
@@ -1192,19 +845,9 @@ export default function MiseEnPlaceApp() {
         loadPermanentSubtaskCompletions(selectedDate),
         loadPermanentCategories(),
         loadPermanentTasks(),
-        loadMenuSections(),
-        loadMenuItems(),
-        loadGroupReservations(),
-        loadMenuRestaurantSections(),
-        loadMenuRestaurantItems(),
-        loadMenuRestaurantNotes(),
-        loadFicheSections(),
-        loadFicheProducts(),
         loadSuppliers(),
         loadSupplierProducts(),
         loadSupplierOrders(),
-        loadEvents(),
-        loadInvoices(),
       ]);
       
       console.log('[SWITCH] All data loaded, switching to daily screen');
@@ -1361,59 +1004,6 @@ export default function MiseEnPlaceApp() {
     );
   }
 
-  // Si un group_token est présent
-  if (groupToken) {
-    // Si on a choisi de voir la vue staff (après avoir cliqué sur le bouton)
-    if (showStaffGroupView) {
-      return (
-        <StaffGroupViewScreen 
-          token={groupToken} 
-          onClose={() => { setShowStaffGroupView(false); setGroupToken(null); }}
-          primaryColor={restaurant?.primary_color || DEFAULT_PRIMARY}
-          secondaryColor={restaurant?.secondary_color || DEFAULT_SECONDARY}
-          apiRequest={apiRequest}
-        />
-      );
-    }
-    
-    // Si l'utilisateur est authentifié (staff/admin), afficher la vue staff directement
-    if (sessionToken && user) {
-      return (
-        <StaffGroupViewScreen 
-          token={groupToken} 
-          onClose={() => setGroupToken(null)}
-          primaryColor={restaurant?.primary_color || DEFAULT_PRIMARY}
-          secondaryColor={restaurant?.secondary_color || DEFAULT_SECONDARY}
-          apiRequest={apiRequest}
-        />
-      );
-    }
-    
-    // Sinon, afficher la page client publique (non authentifié) avec option de basculer vers staff
-    return (
-      <ClientMenuSelectionScreen 
-        token={groupToken} 
-        onClose={() => setGroupToken(null)}
-        onSwitchToStaffView={() => setShowStaffGroupView(true)}
-      />
-    );
-  }
-
-  // Si un publicGroupRequestRestaurantId est présent, afficher le formulaire public de demande de groupe
-  if (publicGroupRequestRestaurantId) {
-    return <PublicGroupRequestScreen restaurantId={publicGroupRequestRestaurantId} onClose={() => setPublicGroupRequestRestaurantId(null)} />;
-  }
-
-  // Si un trackGroupToken est présent, afficher la page de suivi de réservation
-  if (trackGroupToken) {
-    return <TrackGroupReservationScreen token={trackGroupToken} onClose={() => setTrackGroupToken(null)} />;
-  }
-  
-  // Si un publicMenuRestaurantId est présent, afficher le menu public (QR code)
-  if (publicMenuRestaurantId) {
-    return <PublicMenuScreen restaurantId={publicMenuRestaurantId} onClose={() => setPublicMenuRestaurantId(null)} />;
-  }
-
   if (!sessionToken || !user) {
     return <LoginScreen onLogin={async (token, userData, restaurantData) => {
       setSessionToken(token); setUser(userData); setRestaurant(restaurantData);
@@ -1443,11 +1033,6 @@ export default function MiseEnPlaceApp() {
         loadSubtasks(token); loadSubtaskCompletions(selectedDate, token);
         // Charger les sous-tâches permanentes
         loadPermanentSubtasks(token); loadPermanentSubtaskCompletions(selectedDate, token);
-        // Charger les données pour tous les écrans (Fiche Technique, Menu Restaurant, Events, etc.)
-        loadFicheSections(token); loadFicheProducts(token);
-        loadMenuRestaurantSections(token); loadMenuRestaurantItems(token); loadMenuRestaurantNotes(token);
-        loadEvents(token);
-        loadGroupReservations(token);
       }
       // Charger les restaurants pour les admins, holdings ET staff avec plusieurs restaurants
       if (userData.role === 'admin' || userData.role === 'holding' || (userData.role === 'staff' && userData.restaurant_ids && userData.restaurant_ids.length > 1)) { 
@@ -1571,19 +1156,8 @@ export default function MiseEnPlaceApp() {
     );
   }
 
-  // Déterminer si on est dans le mode Menu Groupe
-  const isMenuGroupeMode = currentScreen === 'menuGroupe' || currentScreen === 'createGroup';
+  // Déterminer si on est dans le mode Order Preparation
   const isOrderPrepMode = currentScreen === 'orderPrep';
-  
-  // Vérifier si l'utilisateur a accès au Menu Groupe
-  const hasMenuGroupeAccess = () => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.menu_groupe === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.menu_groupe?.actif === true) return true;
-    return false;
-  };
   
   // Vérifier si l'utilisateur a accès aux Tâches
   const hasTachesAccess = () => {
@@ -1642,55 +1216,6 @@ export default function MiseEnPlaceApp() {
     return false;
   };
   
-  // Vérifier si l'utilisateur a accès à Fiche Technique
-  const hasFicheTechniqueAccess = () => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.fiche_technique === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.fiche_technique?.actif === true) return true;
-    return false;
-  };
-  
-  // Obtenir le niveau d'accès à Fiche Technique (pour staff)
-  const getFicheTechniqueAccess = (): 'none' | 'bar' | 'cuisine' | 'both' => {
-    if (user.role === 'admin') return 'both';
-    // Check new detailed_permissions first
-    const dp = (user as any).detailed_permissions;
-    if (dp?.fiche_technique?.section_access) {
-      // Normalize 'tous' to 'both' for compatibility
-      const access = dp.fiche_technique.section_access;
-      if (access === 'tous' || access === 'all') return 'both';
-      return access;
-    }
-    // If fiche_technique is active but no section_access specified, default to 'both'
-    if (dp?.fiche_technique?.actif === true) return 'both';
-    // Fallback to old permission system
-    return user.permissions?.fiche_technique_access || 'none';
-  };
-  
-  // Vérifier si l'utilisateur peut modifier la Fiche Technique
-  const canEditFicheTechnique = (): boolean => {
-    if (user.role === 'admin') return true;
-    const dp = (user as any).detailed_permissions;
-    if (!dp?.fiche_technique) return false;
-    // Vérifier si une des permissions de modification est activée
-    return dp.fiche_technique.section?.modifier === true || 
-           dp.fiche_technique.produits?.modifier === true ||
-           dp.fiche_technique.section?.ajouter === true ||
-           dp.fiche_technique.produits?.ajouter === true;
-  };
-  
-  // Vérifier si l'utilisateur peut voir une catégorie spécifique dans Fiche Technique
-  const canViewFicheCategory = (category: 'bar' | 'cuisine'): boolean => {
-    const access = getFicheTechniqueAccess();
-    if (access === 'both') return true;
-    return access === category;
-  };
-  
-  // Vérifier si l'utilisateur est manager (pour voir les prix)
-  const isManager = () => user.role === 'admin';
-  
   // Fonction générique pour vérifier les permissions détaillées
   const hasPermission = (path: string): boolean => {
     if (user.role === 'admin') return true;
@@ -1724,39 +1249,9 @@ export default function MiseEnPlaceApp() {
     // Les admins voient toujours le menu
     if (user.role === 'admin') return true;
     // Les staffs avec au moins une permission voient le menu
-    return hasMenuGroupeAccess() || hasPrepCommandeAccess() || hasFicheTechniqueAccess() || hasArdoiseAccess() || hasTachesAccess() || hasMenuRestaurantAccess() || hasEventsAccess() || hasPrestatairesAccess();
+    return hasPrepCommandeAccess() || hasTachesAccess();
   };
-  
-  // Vérifier si l'utilisateur a accès au module Menu Restaurant
-  const hasMenuRestaurantAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.menu_restaurant === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.menu_restaurant?.actif === true) return true;
-    return false;
-  };
-  
-  // Vérifier si l'utilisateur a accès au module Événements
-  const hasEventsAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.events === true || user.permissions?.evenements === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.evenement?.actif === true || dp?.evenements?.actif === true || dp?.events?.actif === true) return true;
-    return false;
-  };
-  
-  // Vérifier si l'utilisateur a accès au module Facturation
-  const hasFacturationAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.facturation === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.facturation?.actif === true) return true;
-    return false;
-  };
-  
+
   // Vérifier si l'utilisateur peut accéder à plusieurs restaurants
   const canSwitchRestaurant = (): boolean => {
     if (user.role === 'admin') return true;
@@ -1764,78 +1259,11 @@ export default function MiseEnPlaceApp() {
     const userRestaurantIds = (user as any).restaurant_ids || [];
     return userRestaurantIds.length > 1;
   };
-  
-  // Vérifier si l'utilisateur a accès au module Prestataires
-  const hasPrestatairesAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.prestataires === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.prestataires?.actif === true) return true;
-    return false;
-  };
-  
-  // Vérifier si l'utilisateur a accès au module Menu Client
-  const hasMenuClientAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Permission individuelle - uniquement menu_client
-    if (user.permissions?.menu_client === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.menu_client?.actif === true) return true;
-    return false;
-  };
-  
-  // Vérifier si l'utilisateur a accès au module Menu Restaurant en cours (Brouillon)
-  const hasMenuRestaurantDraftAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Permission individuelle - uniquement menu_restaurant_en_cours
-    if (user.permissions?.menu_restaurant_en_cours === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.menu_restaurant_en_cours?.actif === true) return true;
-    return false;
-  };
-  
-  // Vérifier si l'utilisateur a accès au module Ardoise
-  const hasArdoiseAccess = (): boolean => {
-    if (user.role === 'admin') return true;
-    // Check both old and new permission systems
-    if (user.permissions?.ardoise === true) return true;
-    const dp = (user as any).detailed_permissions;
-    if (dp?.ardoise?.actif === true) return true;
-    return false;
-  };
-  
-  // Obtenir les permissions Ardoise détaillées
-  const getArdoisePermissions = () => {
-    if (user.role === 'admin') {
-      return {
-        actif: true,
-        edition: { acces: true, mode: 'modifier' },
-        ventes: { acces: true, mode: 'modifier' },
-        rapports: { acces: true, mode: 'modifier', export_pdf: true, export_excel: true }
-      };
-    }
-    const dp = (user as any).detailed_permissions;
-    if (!dp || !dp.ardoise) {
-      return {
-        actif: false,
-        edition: { acces: false, mode: 'lecture' },
-        ventes: { acces: false, mode: 'lecture' },
-        rapports: { acces: false, mode: 'lecture', export_pdf: false, export_excel: false }
-      };
-    }
-    return {
-      actif: dp.ardoise.actif || false,
-      edition: dp.ardoise.edition || { acces: false, mode: 'lecture' },
-      ventes: dp.ardoise.ventes || { acces: false, mode: 'lecture' },
-      rapports: dp.ardoise.rapports || { acces: false, mode: 'lecture', export_pdf: false, export_excel: false }
-    };
-  };
 
   return (
     <SafeAreaWrapper 
       backgroundColor={primaryColor} 
-      bottomBackgroundColor={(currentScreen === 'ficheTechnique' || currentScreen === 'menuRestaurant' || currentScreen === 'menuRestaurantDraft' || currentScreen === 'events' || currentScreen === 'facturation' || currentScreen === 'rapportArdoise' || isMenuGroupeMode || isOrderPrepMode) ? secondaryColor : undefined}
+      bottomBackgroundColor={isOrderPrepMode ? secondaryColor : undefined}
       style={styles.container}
     >
       <StatusBar style="light" />
@@ -1925,7 +1353,6 @@ export default function MiseEnPlaceApp() {
                 <WebIcon name="time-outline" size={20} color={secondaryColor} />
                 <Text style={[styles.settingsDropdownText, { color: secondaryColor }]}>Historique</Text>
               </TouchableOpacity>
-              {/* [APP-FILTER] Prestataires settings masqué */}
             </>
           )}
           <View style={styles.settingsDropdownDivider} />
@@ -1972,24 +1399,6 @@ export default function MiseEnPlaceApp() {
               <Text style={[styles.managerMenuText, { color: secondaryColor }]}>Préparation de commande</Text>
             </TouchableOpacity>
           )}
-          {/* Option Menu Restaurant - visible pour admins et staff avec permission menu_restaurant */}
-          {/* [APP-FILTER] menu-item-menu-restaurant masqué */}
-          {/* Option Menu Restaurant en cours (brouillon) - visible pour admins et staff avec permission menu_restaurant_en_cours */}
-          {/* [APP-FILTER] menu-item-menu-restaurant-draft masqué */}
-          {/* Option Menu Client - visible pour admins et staff avec permission menu_client ou menu_restaurant */}
-          {/* [APP-FILTER] menu-item-menu-client masqué */}
-          {/* Option Fiche Technique - visible pour admins et staff avec permission fiche_technique */}
-          {/* [APP-FILTER] menu-item-fiche-technique masqué */}
-          {/* Option Menu Groupe - visible pour admins et staff avec permission menu_groupe */}
-          {/* [APP-FILTER] menu-item-groupe masqué */}
-          {/* Option Événement - visible pour admins et staff avec permission événements */}
-          {/* [APP-FILTER] menu-item-events masqué */}
-          {/* Option Facturation - visible pour admins et staff avec permission facturation */}
-          {/* [APP-FILTER] menu-item-facturation masqué */}
-          {/* Option Rapport Ardoise - visible pour admins et staff avec permission ardoise */}
-          {/* [APP-FILTER] menu-item-rapport-ardoise masqué */}
-          {/* Option Prestataires - visible pour admins et staff avec permission prestataires */}
-          {/* [APP-FILTER] menu-item-prestataires masqué */}
         </View>
       )}
 
@@ -1997,11 +1406,11 @@ export default function MiseEnPlaceApp() {
         styles.content, 
         { backgroundColor: secondaryColor },
         // Ajouter du padding en bas si la barre de navigation fixe est présente (sur web)
-        Platform.OS === 'web' && !isMenuGroupeMode && !isOrderPrepMode && currentScreen !== 'ficheTechnique' && currentScreen !== 'menuRestaurant' && currentScreen !== 'menuRestaurantDraft' && currentScreen !== 'events' && currentScreen !== 'facturation' && currentScreen !== 'rapportArdoise' && currentScreen !== 'prestataires' && {
+        Platform.OS === 'web' && !isOrderPrepMode && {
           paddingBottom: 80
         },
         // Étendre jusqu'en bas si pas de barre de navigation (réduit le padding sur web)
-        (currentScreen === 'ficheTechnique' || currentScreen === 'menuRestaurant' || currentScreen === 'menuRestaurantDraft' || currentScreen === 'events' || currentScreen === 'facturation' || currentScreen === 'rapportArdoise' || isMenuGroupeMode || isOrderPrepMode) && { 
+        isOrderPrepMode && { 
           borderBottomLeftRadius: 0, 
           borderBottomRightRadius: 0,
           paddingBottom: 0
@@ -2043,16 +1452,6 @@ export default function MiseEnPlaceApp() {
             setSelectedDate={(date) => { setSelectedDate(date); loadDailyTasks(undefined, date); loadHistory(); }}
             primaryColor={primaryColor} secondaryColor={secondaryColor} onRefresh={loadHistory} />
         )}
-        {currentScreen === 'prestataires' && (user.role === 'admin' || hasPrestatairesAccess()) && (
-          <PrestatairesScreen 
-            key={`prestataires-${restaurant?.restaurant_id}`}
-            prestataires={prestataires}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadPrestataires={loadPrestataires}
-          />
-        )}
         {currentScreen === 'superadmin' && user.role === 'superadmin' && (
           <SuperAdminScreen
             restaurants={superadminRestaurants}
@@ -2068,36 +1467,6 @@ export default function MiseEnPlaceApp() {
             onNavigateToCategories={() => setCurrentScreen('categories')}
             onNavigateToUsers={() => { setCurrentScreen('users'); loadUsers(); }}
             currentUser={user} />
-        )}
-        {currentScreen === 'menuGroupe' && hasMenuGroupeAccess() && (
-          <MenuGroupeScreen 
-            key={`menuGroupe-${restaurant?.restaurant_id}`}
-            sections={menuSections} 
-            items={menuItems} 
-            reservations={groupReservations}
-            primaryColor={primaryColor} 
-            secondaryColor={secondaryColor} 
-            apiRequest={apiRequest}
-            loadSections={loadMenuSections}
-            loadItems={loadMenuItems}
-            loadReservations={loadGroupReservations}
-            onCreateGroup={() => setCurrentScreen('createGroup')}
-            restaurant={restaurant}
-            sessionToken={sessionToken}
-            isAdmin={user.role === 'admin'}
-          />
-        )}
-        {currentScreen === 'createGroup' && hasMenuGroupeAccess() && (
-          <CreateGroupScreen 
-            key={`createGroup-${restaurant?.restaurant_id}`}
-            sections={menuSections} 
-            items={menuItems}
-            primaryColor={primaryColor} 
-            secondaryColor={secondaryColor} 
-            apiRequest={apiRequest}
-            onBack={() => { setCurrentScreen('menuGroupe'); loadGroupReservations(); }}
-            restaurant={restaurant}
-          />
         )}
         {currentScreen === 'permanentTasks' && user.role === 'admin' && (
           <PermanentTasksScreen 
@@ -2128,190 +1497,10 @@ export default function MiseEnPlaceApp() {
             userPrepPermissions={user.detailed_permissions?.preparation_commande || {}}
           />
         )}
-        {currentScreen === 'ficheTechnique' && hasFicheTechniqueAccess() && (
-          <FicheTechniqueScreen
-            key={`ficheTechnique-${restaurant?.restaurant_id}`}
-            sections={ficheSections}
-            products={ficheProducts}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadSections={loadFicheSections}
-            loadProducts={loadFicheProducts}
-            sessionToken={sessionToken}
-            setCurrentScreen={setCurrentScreen}
-            isManager={isManager()}
-            userFicheTechniqueAccess={getFicheTechniqueAccess()}
-            userFichePermissions={user?.detailed_permissions?.fiche_technique || {}}
-          />
-        )}
-        {currentScreen === 'menuRestaurant' && hasMenuRestaurantAccess() && (
-          <MenuRestaurantScreen
-            key={`menuRestaurant-${restaurant?.restaurant_id}`}
-            sections={menuRestaurantSections}
-            items={menuRestaurantItems}
-            notes={menuRestaurantNotes}
-            ficheProducts={ficheProducts}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadSections={loadMenuRestaurantSections}
-            loadItems={loadMenuRestaurantItems}
-            loadNotes={loadMenuRestaurantNotes}
-            loadFicheProducts={loadFicheProducts}
-            setCurrentScreen={setCurrentScreen}
-            sessionToken={sessionToken}
-            isDraftMode={false}
-            userPermissions={
-              // Menu Restaurant final = lecture seule pour staff, même avec permissions
-              // Seul l'admin peut modifier le menu final
-              user?.role === 'admin' 
-                ? (user?.detailed_permissions?.menu_restaurant || {})
-                : { actif: true } // Staff = lecture seule (pas de boutons d'édition)
-            }
-            isAdmin={user?.role === 'admin'}
-          />
-        )}
-        {currentScreen === 'menuRestaurantDraft' && hasMenuRestaurantDraftAccess() && (
-          <View style={{ flex: 1 }}>
-            {/* Header avec titre et boutons */}
-            <View style={{ backgroundColor: primaryColor, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: secondaryColor, fontSize: 18, fontWeight: 'bold' }}>Menu en cours</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity 
-                  onPress={async () => {
-                    try {
-                      const confirmed = await showConfirm('Régénérer les traductions du menu ?\n\nCette opération peut prendre quelques minutes.');
-                      if (!confirmed) return;
-                      
-                      const response = await fetch(`${API_BASE_URL}/api/public/translations/${restaurant?.restaurant_id}/generate`, {
-                        method: 'POST'
-                      });
-                      
-                      if (response.ok) {
-                        alert('✅ Traductions régénérées avec succès !');
-                      } else {
-                        const error = await response.json();
-                        alert('❌ Erreur: ' + (error.detail || 'Échec de la régénération'));
-                      }
-                    } catch (err: any) {
-                      alert('❌ Erreur: ' + err.message);
-                    }
-                  }}
-                  style={{ backgroundColor: '#9C27B0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                  data-testid="regenerate-translations-btn"
-                >
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>🌐 Traduire</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={publishDraftToMenuRestaurant}
-                  style={{ backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>📤 Publier</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <MenuRestaurantScreen
-              key={`menuRestaurantDraft-${restaurant?.restaurant_id}`}
-              sections={menuRestaurantDraftSections}
-              items={menuRestaurantDraftItems}
-              notes={menuRestaurantNotes}
-              ficheProducts={ficheProducts}
-              primaryColor={primaryColor}
-              secondaryColor={secondaryColor}
-              apiRequest={apiRequest}
-              loadSections={loadMenuRestaurantDraftSections}
-              loadItems={loadMenuRestaurantDraftItems}
-              loadNotes={loadMenuRestaurantNotes}
-              loadFicheProducts={loadFicheProducts}
-              setCurrentScreen={setCurrentScreen}
-              sessionToken={sessionToken}
-              isDraftMode={true}
-              userPermissions={
-                // Pour Menu en cours: si actif, donner les permissions d'édition complètes par défaut
-                user?.detailed_permissions?.menu_restaurant_en_cours?.actif 
-                  ? { 
-                      actif: true, 
-                      section: { ajouter: true, modifier: true, supprimer: true },
-                      produits: { ajouter: true, modifier: true, supprimer: true },
-                      note: true,
-                      export_pdf: true,
-                      export_csv: true
-                    }
-                  : user?.detailed_permissions?.menu_restaurant || {}
-              }
-              isAdmin={user?.role === 'admin'}
-            />
-          </View>
-        )}
-        {currentScreen === 'events' && hasEventsAccess() && (
-          <View style={{ flex: 1, backgroundColor: '#fff' }}>
-            <EventsScreen
-              key={`events-${restaurant?.restaurant_id}`}
-              events={events}
-              selectedEvent={selectedEvent}
-              setSelectedEvent={setSelectedEvent}
-              providers={eventProviders}
-              tasks={eventTasks}
-              menuSections={eventMenuSections}
-              menuItems={eventMenuItems}
-              pricePackages={eventPricePackages}
-              drinkOptions={eventDrinkOptions}
-              users={users}
-              prestataires={prestataires}
-              primaryColor={primaryColor}
-              secondaryColor={secondaryColor}
-              apiRequest={apiRequest}
-              loadEvents={loadEvents}
-              loadEventData={loadEventData}
-              loadPrestataires={loadPrestataires}
-              allRestaurants={allRestaurants}
-              restaurant={restaurant}
-              setShowRestaurantPicker={setShowRestaurantPicker}
-              isAdmin={user?.role === 'admin'}
-              userPermissions={user?.detailed_permissions}
-            />
-          </View>
-        )}
-        {currentScreen === 'facturation' && (user.role === 'admin' || hasFacturationAccess()) && (
-          <FacturationScreen
-            key={`facturation-${restaurant?.restaurant_id}`}
-            invoices={invoices}
-            menuRestaurantSections={menuRestaurantSections}
-            menuRestaurantItems={menuRestaurantItems}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadInvoices={loadInvoices}
-            restaurant={restaurant}
-            loadMenuRestaurantSections={loadMenuRestaurantSections}
-            loadMenuRestaurantItems={loadMenuRestaurantItems}
-          />
-        )}
-        {currentScreen === 'rapportArdoise' && (user.role === 'admin' || hasArdoiseAccess()) && (
-          <RapportArdoiseScreen
-            key={`rapport-ardoise-${restaurant?.restaurant_id}`}
-            ardoiseData={ardoiseData}
-            ardoiseReport={ardoiseReport}
-            ardoiseReportPeriod={ardoiseReportPeriod}
-            setArdoiseReportPeriod={setArdoiseReportPeriod}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            apiRequest={apiRequest}
-            loadArdoiseData={loadArdoiseData}
-            loadArdoiseReport={loadArdoiseReport}
-            saveArdoiseSales={saveArdoiseSales}
-            updateArdoise={updateArdoise}
-            restaurant={restaurant}
-            showAlert={showAlert}
-            ardoisePermissions={getArdoisePermissions()}
-            onBack={() => setCurrentScreen('daily')}
-          />
-        )}
       </View>
 
       {/* Bottom navigation - visible uniquement sur les écrans principaux de tâches */}
-      {!isMenuGroupeMode && !isOrderPrepMode && currentScreen !== 'ficheTechnique' && currentScreen !== 'menuRestaurant' && currentScreen !== 'menuRestaurantDraft' && currentScreen !== 'events' && currentScreen !== 'facturation' && currentScreen !== 'rapportArdoise' && currentScreen !== 'prestataires' && (
+      {!isOrderPrepMode && (
         <View 
           style={[
             styles.bottomNav, 
@@ -5843,9 +5032,6 @@ function UsersScreen({ users, categories, primaryColor, secondaryColor, apiReque
   );
 }
 
-// ==================== PRESTATAIRES SCREEN ====================
-function PrestatairesScreen(_props: any) { return null as any; }
-
 // ==================== SUPER ADMIN SCREEN ====================
 function SuperAdminScreen({ restaurants, users, stats, apiRequest, loadData }: any) {
   const [activeTab, setActiveTab] = useState<'restaurants' | 'users' | 'stats'>('restaurants');
@@ -7307,400 +6493,6 @@ function PermanentTasksScreen({ permanentCategories, permanentTasks, primaryColo
     </ScrollView>
   );
 }
-
-// ==================== MENU GROUPE SCREEN ====================
-function MenuGroupeScreen(_props: any) { return null as any; }
-
-// ==================== CREATE GROUP SCREEN ====================
-function CreateGroupScreen(_props: any) { return null as any; }
-
-// ==================== CLIENT MENU SELECTION SCREEN (Public) ====================
-function ClientMenuSelectionScreen(_props: any) { return null as any; }
-
-// ==================== PUBLIC GROUP REQUEST SCREEN (Formulaire public de demande de réservation) ====================
-
-// ==================== STAFF GROUP VIEW SCREEN (Vue staff après scan QR) ====================
-function StaffGroupViewScreen(_props: any) { return null as any; }
-
-function PublicGroupRequestScreen(_props: any) { return null as any; }
-
-// ==================== TRACK GROUP RESERVATION SCREEN (Suivi de réservation par le client) ====================
-function TrackGroupReservationScreen(_props: any) { return null as any; }
-
-// ==================== PUBLIC MENU SCREEN (QR Code) ====================
-function PublicMenuScreen(_props: any) { return null as any; }
-
-// ==================== FICHE TECHNIQUE SCREEN ====================
-function FicheTechniqueScreen(_props: any) { return null as any; }
-
-// ==================== MENU RESTAURANT SCREEN ====================
-// Design avec couleurs distinctives et bonne visibilité
-// Palette de couleurs contrastées pour les différents niveaux
-const MENU_COLORS = {
-  // Sections principales - RAL 5008 (Grey Blue / Bleu gris)
-  sectionFood: '#37474F',        // RAL 5008 - Bleu gris foncé pour sections Food
-  sectionBoisson: '#37474F',     // RAL 5008 - Bleu gris foncé pour sections Boisson
-  // Sous-sections (moyennes)
-  subSection: '#5B5EA6',       // Violet/Indigo
-  // Items
-  itemName: '#1A1A2E',         // Noir profond
-  itemDesc: '#8B4513',         // Marron (SaddleBrown) - pour différencier des noms de plats
-  itemPrice: '#D4AF37',        // Or/Doré
-  // Suggestions/Succession
-  suggestion: '#C84B31',       // Rouge brique
-  // Happy Hour
-  happyHour: '#FF6B35',        // Orange vif
-  // Suppléments
-  supplement: '#6B4226',       // Marron foncé
-  // Notes
-  note: '#8B0000',             // Rouge foncé
-};
-
-function MenuRestaurantScreen(_props: any) { return null as any; }
-
-// Styles spécifiques pour Menu Restaurant
-const menuRestaurantStyles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  backButton: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },
-  backText: { fontSize: 16, marginLeft: 4 },
-  screenTitle: { fontSize: 22, fontWeight: 'bold' },
-  
-  // Dropdown styles (replacing tabs)
-  dropdownButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 14, 
-    borderRadius: 10 
-  },
-  dropdownButtonText: { fontSize: 18, fontWeight: '600', color: 'white' },
-  dropdownMenu: { 
-    position: 'absolute', 
-    top: '100%', 
-    left: 0, 
-    right: 0, 
-    backgroundColor: 'white', 
-    borderRadius: 10, 
-    marginTop: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5
-  },
-  dropdownItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 14, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#EEE' 
-  },
-  dropdownItemActive: { backgroundColor: '#F5F5F5' },
-  dropdownItemText: { fontSize: 16, color: '#333' },
-  
-  // Choice modal styles
-  choiceButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 10,
-    gap: 12
-  },
-  choiceButtonText: { fontSize: 16, fontWeight: '600', color: 'white' },
-  
-  // Old tab styles (kept for compatibility)
-  tabContainer: { flexDirection: 'row', marginBottom: 16, borderRadius: 12, overflow: 'hidden', backgroundColor: '#E0E0E0' },
-  tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  tabText: { fontSize: 16, fontWeight: '600', color: '#333' },
-  
-  actionRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  addButton: { flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, alignItems: 'center' },
-  addButtonText: { color: 'white', fontWeight: '600', fontSize: 15 },
-  
-  // ========== ARDOISE STYLES ==========
-  ardoiseContainer: {
-    backgroundColor: '#2d3436',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16
-  },
-  ardoiseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 8
-  },
-  ardoiseTitle: {
-    color: '#ffd166',
-    fontSize: 20,
-    fontWeight: 'bold',
-    letterSpacing: 1
-  },
-  ardoiseActionBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6
-  },
-  ardoiseSection: {
-    marginBottom: 12
-  },
-  ardoiseSectionTitle: {
-    color: '#ffd166',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,209,102,0.3)',
-    paddingBottom: 4
-  },
-  ardoiseItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 8
-  },
-  ardoiseItemName: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '500'
-  },
-  ardoiseItemDesc: {
-    color: '#b2bec3',
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginTop: 2
-  },
-  ardoiseItemPrice: {
-    color: '#ffd166',
-    fontSize: 15,
-    fontWeight: '600'
-  },
-  ardoiseHint: {
-    color: '#636e72',
-    fontSize: 11,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 12
-  },
-  
-  menuContent: { marginBottom: 20 },
-  
-  sectionHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    padding: 14, 
-    borderRadius: 10, 
-    marginBottom: 8 
-  },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: 'white' },
-  sectionActionBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  
-  happyHourBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginTop: 4, alignSelf: 'flex-start' },
-  happyHourBadgeText: { fontSize: 11, color: 'white', fontWeight: '600' },
-  
-  itemContainer: { 
-    backgroundColor: 'white', 
-    padding: 12, 
-    marginBottom: 6, 
-    borderRadius: 8, 
-    marginLeft: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#DDD'
-  },
-  itemRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  itemName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  itemDesc: { fontSize: 14, lineHeight: 18 },
-  itemPrice: { fontSize: 16, fontWeight: 'bold' },
-  itemActionBtn: { padding: 6, backgroundColor: '#F5F5F5', borderRadius: 6 },
-  
-  formatName: { fontSize: 12, color: '#888' },
-  happyHourPrice: { fontSize: 12, fontStyle: 'italic' },
-  
-  // Happy Hour Table Styles
-  happyHourTable: {
-    marginTop: 12,
-    marginLeft: 16,
-    backgroundColor: '#FFF5EB',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#FF6B35'
-  },
-  happyHourTableHeader: {
-    backgroundColor: '#FF6B35',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  happyHourTableTitle: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14
-  },
-  happyHourTableBody: {
-    padding: 12
-  },
-  happyHourTableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFD5C0'
-  },
-  happyHourItemName: {
-    fontSize: 13,
-    color: '#333',
-    flex: 1
-  },
-  happyHourPriceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  happyHourOriginalPrice: {
-    fontSize: 12,
-    color: '#999',
-    textDecorationLine: 'line-through'
-  },
-  happyHourNewPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FF6B35'
-  },
-  
-  suggestionContainer: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#EEE' },
-  suggestionText: { fontSize: 13, fontWeight: '500', fontStyle: 'italic' },
-  
-  supplementContainer: { marginTop: 6, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  supplementLabel: { fontSize: 12, fontWeight: '600' },
-  supplementText: { fontSize: 12 },
-  
-  notesSection: { marginTop: 20, paddingTop: 16, borderTopWidth: 2, borderTopColor: '#DDD' },
-  notesSectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
-  noteContainer: { 
-    backgroundColor: '#FFF9F0', 
-    padding: 12, 
-    borderRadius: 8, 
-    marginBottom: 8,
-    borderLeftWidth: 4,
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  noteText: { flex: 1, fontSize: 14, fontWeight: '500' },
-  noteDeleteBtn: { padding: 4 },
-  
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { fontSize: 16, color: '#999', marginBottom: 8 },
-  emptyHint: { fontSize: 14, color: '#BBB' },
-  
-  parentOption: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 8, 
-    borderRadius: 20, 
-    backgroundColor: '#E8E8E8',
-    marginRight: 8 
-  },
-  parentOptionSelected: { backgroundColor: '#333' },
-  parentOptionText: { fontSize: 14, color: '#333' },
-  
-  happyHourToggle: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  checkbox: { 
-    width: 24, 
-    height: 24, 
-    borderRadius: 6, 
-    borderWidth: 2, 
-    borderColor: '#999',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  
-  formatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  formatInput: { 
-    borderWidth: 1, 
-    borderColor: '#CCC', 
-    borderRadius: 8, 
-    paddingHorizontal: 12, 
-    paddingVertical: 10,
-    fontSize: 14,
-    backgroundColor: 'white'
-  },
-  
-  addRowButton: { 
-    borderWidth: 1, 
-    borderColor: '#999', 
-    borderStyle: 'dashed', 
-    borderRadius: 8, 
-    paddingVertical: 10, 
-    alignItems: 'center',
-    marginTop: 4
-  },
-  addRowButtonText: { fontSize: 14, color: '#666' },
-  
-  // Export buttons
-  exportRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16
-  },
-  exportButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8
-  },
-  exportButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 13
-  },
-  
-  ficheSearchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    marginBottom: 8
-  },
-  ficheSearchContainer: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12
-  },
-  ficheSearchInput: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-    backgroundColor: 'white'
-  },
-  ficheSearchItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE'
-  }
-});
-
-// ==================== MENU RESTAURANT DRAFT SCREEN ====================
-function MenuRestaurantDraftScreen(_props: any) { return null as any; }
 
 // ==================== ORDER PREPARATION SCREEN ====================
 function OrderPreparationScreen({ suppliers, products, orders, primaryColor, secondaryColor, apiRequest, loadSuppliers, loadProducts, loadOrders, isAdmin, sessionToken, userPrepPermissions = {} }: any) {
@@ -10532,41 +9324,6 @@ function getTodayDate(): string { return new Date().toISOString().split('T')[0];
 function getTomorrowDate(): string { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; }
 function addDays(dateStr: string, days: number): string { const d = new Date(dateStr); d.setDate(d.getDate() + days); return d.toISOString().split('T')[0]; }
 function formatDate(dateStr: string): string { return new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); }
-
-// ==================== EVENTS SCREEN ====================
-
-interface EventsScreenProps {
-  events: any[];
-  selectedEvent: any | null;
-  setSelectedEvent: (event: any | null) => void;
-  providers: any[];
-  tasks: any[];
-  menuSections: any[];
-  menuItems: any[];
-  pricePackages: any[];
-  drinkOptions: any[];
-  users: any[];
-  prestataires: Prestataire[];
-  primaryColor: string;
-  secondaryColor: string;
-  apiRequest: (endpoint: string, options?: RequestInit) => Promise<any>;
-  loadEvents: () => void;
-  loadEventData: (eventId: string) => void;
-  loadPrestataires: () => void;
-  allRestaurants: any[];
-  restaurant: any;
-  setShowRestaurantPicker: (show: boolean) => void;
-  isAdmin: boolean;
-  userPermissions: any;
-}
-
-function EventsScreen(_props: any) { return null as any; }
-
-// ==================== FACTURATION SCREEN (Devis et Factures) ====================
-function FacturationScreen(_props: any) { return null as any; }
-
-// ==================== RAPPORT ARDOISE SCREEN ====================
-function RapportArdoiseScreen(_props: any) { return null as any; }
 
 // ==================== STYLES ====================
 const styles = StyleSheet.create({
