@@ -206,18 +206,19 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection with error handling
 mongo_url = os.environ.get('MONGO_URL')
 if not mongo_url:
-    logging.error("MONGO_URL environment variable is not set!")
+    print("[STARTUP] FATAL: MONGO_URL environment variable is not set!", flush=True)
     raise ValueError("MONGO_URL environment variable is required")
 
 try:
     client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
     db_name = os.environ.get('DB_NAME')
     if not db_name:
+        print("[STARTUP] FATAL: DB_NAME environment variable is not set!", flush=True)
         raise ValueError("DB_NAME environment variable is required")
     db = client[db_name]
-    print(f"[STARTUP] MongoDB connected to database: {db_name}")
+    print(f"[STARTUP] MongoDB connected to database: {db_name}", flush=True)
 except Exception as e:
-    logging.error(f"Failed to initialize MongoDB client: {e}")
+    print(f"[STARTUP] FATAL: Failed to initialize MongoDB client: {e}", flush=True)
     raise
 
 # Collections
@@ -304,9 +305,12 @@ translations_collection = db.mep_translations  # Store pre-computed translations
 # Group Options Collection (Options configurables pour les réservations groupe)
 group_options_collection = db.mep_group_options  # Options comme DJ, Gâteau anniversaire, etc.
 
-# Events uploads directory
-EVENTS_UPLOADS_DIR = "/app/backend/uploads/events"
-os.makedirs(EVENTS_UPLOADS_DIR, exist_ok=True)
+# Events uploads directory (resolved relative to this file so it works on any host: Render, Emergent, local)
+EVENTS_UPLOADS_DIR = str(ROOT_DIR / "uploads" / "events")
+try:
+    os.makedirs(EVENTS_UPLOADS_DIR, exist_ok=True)
+except (PermissionError, OSError) as _e:
+    print(f"[STARTUP] WARNING: could not create EVENTS_UPLOADS_DIR={EVENTS_UPLOADS_DIR}: {_e}", flush=True)
 
 # SendGrid Configuration
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
@@ -2375,9 +2379,12 @@ async def upload_logo(
     
     return restaurant_doc
 
-# Endpoint d'upload générique pour les images
-UPLOADS_DIR = Path("/app/backend/uploads/images")
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+# Endpoint d'upload générique pour les images (resolved relative to this file)
+UPLOADS_DIR = ROOT_DIR / "uploads" / "images"
+try:
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+except (PermissionError, OSError) as _e:
+    print(f"[STARTUP] WARNING: could not create UPLOADS_DIR={UPLOADS_DIR}: {_e}", flush=True)
 
 @api_router.post("/upload/image")
 async def upload_image(
