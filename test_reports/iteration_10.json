@@ -1,0 +1,45 @@
+{
+  "summary": "Frontend-only verification of the preview MongoDB reset + re-seed. CORE REQUEST VERIFIED OK: (1) /taches/ login groupenaga@gmail.com / LeCercle123! → 200, lands directly on the restaurant dashboard (Le Cercle logo in header) — the 'Votre groupe est vide' empty-holding screen NO LONGER appears; console logs 'Restaurants loaded: 2'; clicking the header logo opens the 'Mes restaurants' picker showing BOTH 'Le Cercle' (checked) and \"O'Parloir\", and switching between them works (POST /restaurants/switch 200, header logo + data refresh). (2) Staff login tharshikan@orange.fr / Kajan1012 → lands on Le Cercle with the staff view (2 daily tasks, settings dropdown shows 'Tharshan / Staff', no restaurant switcher as expected, zero API errors). (3) Seeded data visible in-app on Le Cercle: Categories screen = 4 categories (Froid, Chaud, Salle, Fermeture Salle), Tâches modèles = 3 templates with sub-tasks/recurrence, daily tasks = 2, /menu/ app shows the full real carte (35 sections / 227 items) and 'A L'ARDOISE' with real content. (4) Regression OK: landing / renders 'NeoChef' with the 3 app cards; /taches/, /menu/, /events/ home screens all show Connexion / Créer un restaurant / Créer un groupe (Holding). ISSUES FOUND (pre-existing frontend bugs, not caused by the DB reset): the /events/ app's default 'Événement' screen is blank because loadEvents()/loadPrestataires() are fired at login without the auth token (401) and are never retried on reload; and NO data-testid attributes exist in any built web bundle.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/events, /api/prestataires/list", "issue": "Return 401 'Not authenticated' when the events app calls them right after login (no Authorization header sent). Both return 200 with data via curl using the session token — so this is a frontend token-passing bug, not a backend bug."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "neochef-events / EventsScreen (default screen)", "issue": "After login the events app opens on currentScreen='events' which renders a completely BLANK content area — no empty-state, no loader, no error. Le Cercle has 1 event ('Nouvel an') in the DB and it is never displayed. Same blankness persists after a page reload.", "selector": "body (events screen content area)", "priority": "HIGH"},
+      {"component": "All 3 apps (web build)", "issue": "ZERO data-testid attributes are present in the rendered DOM (document.querySelectorAll('[data-testid]').length === 0) even though the sources define hundreds. React-Native-Web drops unknown data-* props on View/TouchableOpacity/Text — must use testID or dataSet={{testid:'...'}}. Side effect: the injected CSS rules targeting [data-testid=\"app-header\"] and [data-testid=\"bottom-nav\"] (iOS PWA safe-area padding / fixed bottom nav) are dead code and never apply on web.", "selector": "[data-testid=*]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "neochef-events login → data load", "issue": "In the LoginScreen onLogin callback (app/index.tsx ~L1146-1148) loadEvents() and loadPrestataires() are called with no token argument; both use apiRequest() which reads the sessionToken state that has not been committed yet in that render → 401. All sibling loaders that receive (token) succeed (categories, users, menu-restaurant sections/items 200). Additionally fetchUserData() (session restore path) never calls loadEvents(), so a reload does not recover.", "affected_selectors": ["/api/events", "/api/prestataires/list"]},
+      {"flow": "neochef-taches switchRestaurant()", "issue": "Same anti-pattern: after switching restaurant the loaders log '[loadSubtasks] Loading subtasks with token: no' / '[loadPermanentSubtasks] ... token: no'. It currently works because sessionToken state is already set, but it is fragile — pass the token explicitly.", "affected_selectors": ["/api/subtasks/list", "/api/permanent-subtasks/list"]},
+      {"flow": "Tâches dashboard load", "issue": "Still 3-6 duplicate GET /api/permanent-subtasks/list calls per dashboard mount (re-render loop, reported in iteration_9, unfixed). Non-blocking.", "affected_selectors": ["/api/permanent-subtasks/list"]}
+    ],
+    "design_issues": [
+      {"screen": "Restaurant picker (taches)", "issues": ["The switcher affordance is only a tiny 'v' chip next to the logo with no data-testid and no label — hard to discover that both restaurants live behind the header logo. Consider a visible 'Changer de restaurant' label."]},
+      {"screen": "Events app – Événement screen", "issues": ["Empty/blank content area with no empty-state text or error banner when the events fetch fails (401) — user gets a silent white screen."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix neochef-events: pass the session token explicitly to loadEvents(token) / loadPrestataires(token) in the onLogin callback, and call loadEvents()/loadPrestataires() from fetchUserData() so a reload rehydrates them (currently permanent 401 → blank Événement screen).",
+    "Add an empty-state + error state to the Événement screen so a failed/empty fetch is not a blank page.",
+    "Make data-testid actually reach the DOM in the web builds (use testID or dataSet={{testid}}), otherwise automated testing must rely on brittle emoji/text selectors and the [data-testid=...] CSS safe-area fixes never apply.",
+    "Optional: dedupe the repeated /api/permanent-subtasks/list fetch on the Tâches dashboard."
+  ],
+  "critical_code_review_comments": [
+    "neochef-events/app/index.tsx: loadEvents() and loadPrestataires() take no optional token param unlike every other loader — root cause of the 401s. Make the signature consistent: loadX = async (token?: string) => apiRequest(ep, { headers: token ? {Authorization: `Bearer ${token}`} : undefined }).",
+    "apiRequest closes over the sessionToken state, so any loader invoked from the same tick as setSessionToken() will send no auth header. Better: keep the token in a ref (tokenRef.current) updated synchronously on login, and read it inside apiRequest.",
+    "app/index.tsx files are ~9.7k lines each (taches) with near-identical duplicated logic across the 3 apps (switchRestaurant, permissions helpers, restaurant picker, PWA safe-area code are copy-pasted). Extract into a shared package to stop 3-way drift.",
+    "Selecting a restaurant persists the user's restaurant_id server-side, so the next login lands on the last-selected restaurant (observed: after switching to O'Parloir, a fresh login opened on O'Parloir with 0 tasks). Intended? If not, it will look like 'my data disappeared' to the user."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request; login/events/prestataires spot-checked via curl = 200)", "frontend": "85% (10/12 checks passed; events app default screen blank + no data-testid in DOM)"},
+  "seed_data_creation": "none — used the restored/re-seeded data only. No test data created or deleted.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (holding-admin, Groupe Naga, 2 restaurants) and tharshikan@orange.fr / Kajan1012 (staff, Le Cercle) — BOTH VERIFIED working end-to-end in the UI",
+  "context_for_next_testing_agent": "DB reset is CONFIRMED good: holding sees both Le Cercle + O'Parloir in the 'Mes restaurants' picker; real seeded data renders (4 categories, 3 templates, 2 daily tasks, full carte with 35 sections/227 items, ardoise content, 2 group reservations in /events/ → Menu Groupe). IMPORTANT for writing scripts: the built web bundles contain NO data-testid attributes — use page.get_by_text(). Useful text selectors: 'Connexion', input[placeholder=\"Email\"], input[placeholder=\"Mot de passe\"], 'Se connecter'; header: '☰' (hamburger), 'v' (restaurant picker), '⚙️' (settings); taches bottom nav order = 📋 tasks, 📤 prepare, 📝 templates, 📊 categories. Note login lands on the LAST SELECTED restaurant (server-persisted), so switch back to Le Cercle if you see empty screens. Remaining open bugs: events app blank Événement screen (401 token race) and missing data-testid.",
+  "rca_of_the_issue": "Events blank screen RCA: /app/apps/neochef-events/app/index.tsx L1146/L1148 call loadEvents() and loadPrestataires() inside the onLogin callback without a token; those two loaders have no token parameter and rely on apiRequest() reading the sessionToken state, which is still null in that same render → Authorization header omitted → backend returns 401 ('Not authenticated'). Errors are swallowed by console.error, events state stays [], and the default screen ('events') renders nothing. Session-restore path (fetchUserData) never calls loadEvents, so reloading does not recover; only switchRestaurant() (which runs after sessionToken is set) repopulates them. Verified with curl that GET /api/events returns 200 with the 'Nouvel an' event and /api/prestataires/list returns 200 [] for this account, confirming a frontend-only defect."
+}

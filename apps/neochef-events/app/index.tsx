@@ -730,6 +730,9 @@ export default function MiseEnPlaceApp() {
       setRestaurant(data.restaurant);
       await loadCategories(token);
       await loadUsers(token);
+      // Events app : charger les événements et prestataires du restaurant courant (avec token explicite pour éviter la course de setSessionToken)
+      await loadEvents(token);
+      await loadPrestataires(token);
       // Charger la liste des restaurants pour les admins
       if (data.user.role === 'admin') {
         await loadMyRestaurants(token);
@@ -752,8 +755,8 @@ export default function MiseEnPlaceApp() {
   };
 
   // Prestataires Functions
-  const loadPrestataires = async () => {
-    try { const data = await apiRequest('/prestataires/list'); setPrestataires(data || []); }
+  const loadPrestataires = async (token?: string) => {
+    try { const data = await apiRequest('/prestataires/list', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined }); setPrestataires(data || []); }
     catch (error) { console.error('Error loading prestataires:', error); setPrestataires([]); }
   };
 
@@ -812,10 +815,10 @@ export default function MiseEnPlaceApp() {
   };
 
   // Events Functions (Module Événements)
-  const loadEvents = async () => {
+  const loadEvents = async (token?: string) => {
     try {
-      const data = await apiRequest('/events');
-      setEvents(data);
+      const data = await apiRequest('/events', { headers: token ? { 'Authorization': `Bearer ${token}` } : undefined });
+      setEvents(Array.isArray(data) ? data : []);
     } catch (error) { console.error('Error loading events:', error); }
   };
 
@@ -1141,11 +1144,11 @@ export default function MiseEnPlaceApp() {
       // Ne charger les données que si un restaurant est sélectionné
       if (restaurantData) {
         loadCategories(token); loadUsers(token);
-        // Charger les données pour Menu Groupe, Events, Prestataires
+        // Charger les données pour Menu Groupe, Events, Prestataires (avec token pour éviter la course de setSessionToken)
         loadMenuRestaurantSections(token); loadMenuRestaurantItems(token);
-        loadEvents();
+        loadEvents(token);
         loadGroupReservations(token);
-        loadPrestataires();
+        loadPrestataires(token);
       }
       // Charger les restaurants pour les admins, holdings ET staff avec plusieurs restaurants
       if (userData.role === 'admin' || userData.role === 'holding' || (userData.role === 'staff' && userData.restaurant_ids && userData.restaurant_ids.length > 1)) { 
@@ -1789,6 +1792,52 @@ export default function MiseEnPlaceApp() {
             loadMenuRestaurantSections={loadMenuRestaurantSections}
             loadMenuRestaurantItems={loadMenuRestaurantItems}
           />
+        )}
+        {currentScreen === 'events' && (user.role === 'admin' || hasEventsAccess()) && (
+          <EventsScreen
+            key={`events-${restaurant?.restaurant_id}`}
+            events={events}
+            selectedEvent={selectedEvent}
+            setSelectedEvent={setSelectedEvent}
+            providers={eventProviders}
+            tasks={eventTasks}
+            menuSections={eventMenuSections}
+            menuItems={eventMenuItems}
+            pricePackages={eventPricePackages}
+            drinkOptions={eventDrinkOptions}
+            users={users}
+            prestataires={prestataires}
+            primaryColor={primaryColor}
+            secondaryColor={secondaryColor}
+            apiRequest={apiRequest}
+            loadEvents={loadEvents}
+            loadEventData={loadEventData}
+            loadPrestataires={loadPrestataires}
+            allRestaurants={allRestaurants}
+            restaurant={restaurant}
+            setShowRestaurantPicker={setShowRestaurantPicker}
+            isAdmin={user.role === 'admin'}
+            userPermissions={user.permissions || {}}
+          />
+        )}
+        {/* Fallback : staff sans accès à aucun des modules → message clair au lieu d'un écran vide */}
+        {currentScreen === 'events' && !(user.role === 'admin' || hasEventsAccess()) && (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }} data-testid="no-access-screen">
+            <WebIcon name="lock-closed-outline" size={64} color={primaryColor} style={{ opacity: 0.5 }} />
+            <Text style={{ fontSize: 20, fontWeight: '700', color: primaryColor, marginTop: 16, textAlign: 'center' }}>
+              Accès restreint
+            </Text>
+            <Text style={{ fontSize: 14, color: primaryColor, opacity: 0.7, marginTop: 8, textAlign: 'center', maxWidth: 320 }}>
+              Vous n'avez pas les permissions nécessaires pour accéder au module Événements de ce restaurant. Contactez votre administrateur.
+            </Text>
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={{ marginTop: 24, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, backgroundColor: primaryColor }}
+              data-testid="no-access-logout"
+            >
+              <Text style={{ color: secondaryColor, fontWeight: '600' }}>Se déconnecter</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 

@@ -40,6 +40,16 @@ GitHub repo (private): https://github.com/kajarupan10-boop/Neochef-tache
 
 ## Change log
 
+### 2026-08-24 — Preview DB reset + events app fixes (this session)
+- **Requête utilisateur** : `Reset Preview Data — Wipe the preview MongoDB and re-seed with your real 2 restaurants + holding so the flow matches what you have on Render`.
+- **Restauration DB** : `mongorestore --db test_database /app/mongo_backup/test_database/` a restauré 21 users, 21 restaurants, 34 catégories, 36 daily tasks, 44 task templates, 3 ardoises. Vraies données : Holding "Groupe Naga" (`groupenaga@gmail.com`) lié à 2 restaurants (**Le Cercle** `rest_efb3705687ef` + **O'Parloir** `rest_17e485265f52`), staff **Tharshan** (`tharshikan@orange.fr`) sur Le Cercle.
+- **Reset passwords** : ré-hashé les 2 comptes documentés avec le schéma SHA256+salt du backend (pas bcrypt — c'était l'erreur initiale). Voir `hash_password()` dans `/app/backend/server.py` L1141.
+- **Bugs découverts + corrigés dans `/app/apps/neochef-events/app/index.tsx`** :
+  1. **`<EventsScreen>` jamais rendu** (branche `currentScreen === 'events'` supprimée pendant le tree-shaking) → écran 100% blanc pour le Holding. Fix : ajout de la branche render après facturation (~L1795) avec tous les props nécessaires.
+  2. **Token race** sur `loadEvents()` et `loadPrestataires()` au login (state pas encore setté → 401). Fix : les 2 fonctions acceptent maintenant `token?: string`, et `LoginScreen.onLogin` + `fetchUserData` passent le token explicitement.
+  3. **Écran blanc pour staff sans accès events** (défaut `currentScreen='events'` + `hasEventsAccess()=false` → aucune branche match). Fix : ajout d'un fallback "Accès restreint" (icône cadenas + texte + bouton "Se déconnecter") quand aucune branche ne match.
+- **Validé** par testing_agent (iteration_10, 11, 12, 13) : Holding voit ses 2 restaurants + événement, staff voit fallback "Accès restreint", régression /taches/ + /menu/ + landing OK.
+
 ### 2026-08-24 — Preview resilience fix
 - **Bug**: `Je n'arrive pas ouvrir` — https://chef-tasks.preview.emergentagent.com returned HTTP 404 on all frontend routes.
 - **Root cause**: `/app/frontend/build/` is an ephemeral artifact directory (not in git). A container restart wiped it. `serve` was up but had nothing to serve.

@@ -1,0 +1,43 @@
+{
+  "summary": "Frontend-only retest of the claimed fix for the blank /events/ screen. RESULT: NOT FIXED. Two distinct defects confirmed. (1) The token race is still present: on login AND on reload (session-restore via fetchUserData) GET /api/events and GET /api/prestataires/list both return 401 'Not authenticated' because loadEvents()/loadPrestataires() take no token param and apiRequest() reads the sessionToken STATE, which is still null in the same tick as setSessionToken(token). Adding the calls inside fetchUserData therefore only produced two more 401s. (2) NEW / REAL root cause of the blank content area: the component EventsScreen (defined at /app/apps/neochef-events/app/index.tsx L9128) is NEVER RENDERED anywhere — there is no `{currentScreen === 'events' && <EventsScreen .../>}` branch in the main render tree (verified: grep 'EventsScreen' returns only the interface L9103 and the function definition L9128; the render block L1721-1800 only handles users/prestataires/superadmin/settings/menuGroupe/createGroup/facturation). So even after navigating via the manager menu (☰ > Événement) where /api/events returns 200 with the 'Nouvel an' event, the screen stays completely blank. curl GET /api/events with a valid token returns the event, so backend is fine. Regression checks PASS: /taches/ (2 daily tasks, 4 categories, 0 API errors) and /menu/ (full carte + A L'ARDOISE, 0 API errors) work; Prestataires screen renders correctly with its empty state once reached from the menu.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/events, /api/prestataires/list", "issue": "Return 401 only because the events app omits the Authorization header on the initial login/reload load; both return 200 with correct data when called with the token (curl + in-app menu navigation). Frontend defect, not backend."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "neochef-events / EventsScreen", "issue": "BLANK SCREEN ROOT CAUSE: EventsScreen is declared (L9128) but never mounted — no `currentScreen === 'events'` branch exists in the render tree. Default screen is 'events', so after login the content area renders nothing at all (body text = '☰ v ⚙️'). Also reproducible after a reload and after explicitly clicking ☰ > Événement (where /api/events returns 200 with 'Nouvel an'). Add the render branch (with the appropriate access gate, like the prestataires/facturation branches).", "selector": "body (events content area)", "priority": "CRITICAL"},
+      {"component": "neochef-events / Événement screen", "issue": "No empty-state and no error banner: a failed (401) or empty events fetch renders a silent blank page.", "selector": "body", "priority": "MEDIUM"},
+      {"component": "neochef-menu / Carte Food", "issue": "Minor: the 'Aucune section pour Carte Food / Commencez par ajouter une section' empty-state is displayed at the same time as the populated A L'ARDOISE card — contradictory state on the same screen.", "selector": "text=Aucune section pour Carte Food", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "neochef-events login + reload data load", "issue": "STILL BROKEN after the claimed fix. Observed network: login path -> 401 /api/events, 401 /api/prestataires/list; reload path (fetchUserData) -> 200 /auth/me, 200 /categories/list, 200 /users/list, then 401 /api/events and 401 /api/prestataires/list. Console: 'Error loading events: Error: Not authenticated'. Cause: loadEvents()/loadPrestataires() have no (token?) param and apiRequest closes over the not-yet-committed sessionToken state.", "affected_selectors": ["/api/events", "/api/prestataires/list"]}
+    ],
+    "design_issues": [
+      {"screen": "Events app – default screen", "issues": ["Entirely empty beige content area under the header; user has no indication anything failed."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "CRITICAL: render EventsScreen — add `{currentScreen === 'events' && (user.role === 'admin' || hasEventsAccess()) && (<EventsScreen ... />)}` to the render block in /app/apps/neochef-events/app/index.tsx (~L1721-1800). Without this, no amount of data loading will show anything.",
+    "Fix the auth-token race properly: give loadEvents/loadPrestataires an optional token param (like loadCategories/loadUsers) OR keep the token in a ref (tokenRef.current) set synchronously on login and read it inside apiRequest. Currently both login and reload paths 401.",
+    "Add empty-state + error state to the Événement screen.",
+    "Rebuild the events app (yarn build:web -> copy dist to /app/frontend/build/events -> postprocess-builds.py) after the fix; the current bundle at /app/frontend/build/events (entry-3fdfdd42...js) still exhibits both bugs.",
+    "Minor: /menu/ Carte Food shows the 'no section' empty state alongside real content."
+  ],
+  "critical_code_review_comments": [
+    "The previously-applied fix (loadEvents/loadPrestataires inside fetchUserData) addressed a symptom that was not the blocker and introduced two extra 401 requests; the actual blocker is the missing EventsScreen render branch. Verify the render tree before adding data loaders.",
+    "apiRequest() closing over React state makes every loader called in the same tick as setSessionToken() unauthenticated — systemic pattern across all 3 apps; move to a ref-based token.",
+    "app/index.tsx is ~9.7k lines with a component (EventsScreen) that is dead code — a clear sign the file must be split into modules per screen."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only); /api/events + /api/prestataires/list verified 200 via curl/token", "frontend": "60% - events app default screen still blank (primary request FAILED); taches + menu regressions PASS"},
+  "seed_data_creation": "none",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (holding) verified working on /events/, /taches/, /menu/",
+  "context_for_next_testing_agent": "Events blank screen is NOT a data-loading problem: EventsScreen is never mounted (no currentScreen==='events' render branch). Verify with grep 'EventsScreen' in /app/apps/neochef-events/app/index.tsx — must show a JSX usage, not only interface+function. Secondary bug: 401 on /api/events and /api/prestataires/list at login and reload (token race). Test flow that works: login via text 'Connexion' -> input nth(0)=email, nth(1)=password -> 'Se connecter'; then ☰ opens manager menu (Menu Groupe / Événement / Facturation / Prestataires). Prestataires renders correctly. No data-testid in built bundles (known).",
+  "rca_of_the_issue": "Blank /events/ content area has TWO causes: (a) missing render branch for EventsScreen in the main render tree (component defined at L9128 but never used) — this alone guarantees a blank default screen regardless of data; (b) loadEvents()/loadPrestataires() send no Authorization header when invoked in the same render tick as setSessionToken (apiRequest reads stale sessionToken state) → 401 on both the login path and the fetchUserData reload path, so events/prestataires state stays empty. Backend verified healthy: GET /api/events with a fresh session token returns the 'Nouvel an' event for rest_efb3705687ef."
+}

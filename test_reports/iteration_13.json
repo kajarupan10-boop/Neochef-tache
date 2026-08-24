@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only retest of /events/ (https://chef-tasks.preview.emergentagent.com/events/) focused on the 2 defects from iteration_12. BOTH FIXES CONFIRMED. (A) Staff blank screen FIXED: tharshikan@orange.fr now sees the 'Accès restreint' fallback (lock icon, title, explanation 'Vous n'avez pas les permissions nécessaires pour accéder au module Événements de ce restaurant...', 'Se déconnecter' button). Clicking 'Se déconnecter' logs out and returns to the Connexion/Créer un restaurant/Créer un groupe landing. The fallback also renders on the reload/session-restore path. (B) Login-path token race FIXED: after login with groupenaga@gmail.com the event 'Nouvel an — jeu. 31 déc. 2026' is visible IMMEDIATELY (no reload needed); all 9 API calls returned 200 (/auth/login, /users/list, /categories/list, /events, /prestataires/list, /restaurants/my-restaurants, menu-restaurant items+sections, /group-reservations/list) and ZERO console errors — no 'Not authenticated'. Reload (session-restore) still works: /auth/me + /events + /prestataires/list all 200, 'Nouvel an' persists, no errors. Regression OK: landing / shows the 3 CTA cards (Tâches/Menu/Événements) and /taches/ + /menu/ both load their login screens with zero console errors. Bundle verified: entry-6e298f3b1e3733e9c09c26d1b434b0fb.js contains the new fallback string.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/group-reservations/list", "issue": "Still called by the events sub-app at login for staff users -> 403 'Permission denied - menu_groupe.actif required'. Unnecessary call in this sub-app (carried over from iteration_12, not fixed)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "neochef-events / staff login", "issue": "MINOR: 3 uncaught-looking console errors are still logged for the staff user (403 on /events -> 'Error loading events: Accès non autorisé', 403 on /prestataires/list -> 'Admin access required', 403 on /group-reservations/list). The UI degrades gracefully to the 'Accès restreint' screen, but these 403s should be detected and short-circuited (skip the fetches when the user has no events access) instead of logging errors.", "selector": "console", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Events – Accès restreint fallback", "issues": ["Layout/contrast are fine (dark text on beige, centered, readable). The lock glyph renders as an emoji-style icon (consistent with the app's other emoji icons)."]},
+      {"screen": "Events – RN-Web", "issues": ["data-testid (no-access-screen / no-access-logout) confirmed NOT emitted in the DOM as expected; text selectors were used (known pre-existing limitation)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "LOW: skip /events, /prestataires/list and /group-reservations/list fetches when the user has no events access (or catch 403 silently) to remove the 3 console errors on staff login.",
+    "OPTIONAL (not tested this iteration): event CRUD (create/edit/delete) on /events/ has still never been exercised end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "Passing the token explicitly to loadEvents/loadPrestataires fixes this instance, but the underlying race remains structural — a tokenRef read inside apiRequest would prevent the same bug reappearing on any new loader added to the 3 apps.",
+    "app/index.tsx is ~9.7k lines; splitting per-screen modules would make missing render branches / gating bugs obvious."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only)", "frontend": "100% - 6/6 scenarios pass (holding login immediate data, holding reload persistence, staff fallback screen, staff fallback logout, staff fallback after reload, landing + /taches/ + /menu/ regression)"},
+  "seed_data_creation": "none",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (holding, OK). tharshikan@orange.fr / Kajan1012 (staff, now shows 'Accès restreint' fallback as intended)",
+  "context_for_next_testing_agent": "Both iteration_12 defects are resolved and verified in the deployed bundle. Login flow on /events/: click text 'Connexion' -> fill input[0]/input[1] -> click 'Se connecter' (data-testid stripped by RN-Web, use text selectors). Remaining untested area: event CRUD (create/edit/archive/delete) and the event detail sub-tabs beyond mount. Only cosmetic issue left: 3 console 403 errors on staff login.",
+  "rca_of_the_issue": "Defect A was a missing else/fallback render branch when currentScreen='events' but hasEventsAccess() is false; the new `{currentScreen === 'events' && !(admin || hasEventsAccess()) && <NoAccessScreen/>}` branch resolves it. Defect B was a token state race: loadEvents/loadPrestataires read sessionToken from React state (still null in the same tick as onLogin); passing the token explicitly as a parameter resolves it — verified by 200 responses on /events and /prestataires/list on the login path."
+}
