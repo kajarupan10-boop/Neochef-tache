@@ -40,7 +40,12 @@ cp -r "${APPS_DIR}/neochef-events/dist" "${BUILD_DIR}/events"
 # Landing page + serve.json rewrites
 cp "${LANDING_SRC}"     "${BUILD_DIR}/index.html"
 cp "${SERVE_JSON_SRC}"  "${BUILD_DIR}/serve.json"
-cp /app/scripts/client-menu.html "${BUILD_DIR}/client-menu.html"
+# Restore original client menu (from dist.old)
+mkdir -p "${BUILD_DIR}/client" "${BUILD_DIR}/_fresh/static/js/web"
+cp "/app/backend/dist.old/client/[restaurant_id].html" "${BUILD_DIR}/client/" 2>/dev/null || true
+cp "/app/backend/dist.old/_fresh/static/js/web/entry-1773093333-force.js" "${BUILD_DIR}/_fresh/static/js/web/" 2>/dev/null || true
+cp -rn "/app/backend/dist.old/_expo"  "${BUILD_DIR}/" 2>/dev/null || true
+cp -rn "/app/backend/dist.old/assets" "${BUILD_DIR}/" 2>/dev/null || true
 # NeoChef logo (referenced by /neochef-logo.png in the landing HTML)
 cp /app/scripts/neochef-logo.png "${BUILD_DIR}/neochef-logo.png" 2>/dev/null || true
 

@@ -30,7 +30,12 @@ if [ $need_rebuild -eq 1 ]; then
     done
     cp /app/scripts/landing-index.html "$BUILD/index.html"
     cp /app/scripts/landing-serve.json "$BUILD/serve.json"
-    cp /app/scripts/client-menu.html   "$BUILD/client-menu.html"
+    # Restore original client menu page + its JS bundle from dist.old (was lost in tree-shaking)
+    mkdir -p "$BUILD/client" "$BUILD/_fresh/static/js/web"
+    cp "/app/backend/dist.old/client/[restaurant_id].html" "$BUILD/client/" 2>/dev/null || true
+    cp "/app/backend/dist.old/_fresh/static/js/web/entry-1773093333-force.js" "$BUILD/_fresh/static/js/web/" 2>/dev/null || true
+    cp -rn "/app/backend/dist.old/_expo" "$BUILD/" 2>/dev/null || true
+    cp -rn "/app/backend/dist.old/assets" "$BUILD/" 2>/dev/null || true
     cp /app/scripts/neochef-logo.png   "$BUILD/neochef-logo.png" 2>/dev/null || true
     cp "$BUILD/taches/favicon.ico"     "$BUILD/favicon.ico" 2>/dev/null || true
     python3 /app/scripts/postprocess-builds.py
