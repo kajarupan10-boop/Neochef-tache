@@ -1612,7 +1612,7 @@ export default function MiseEnPlaceApp() {
 
       {/* Menu déroulant - positionné à gauche */}
       {showManagerMenu && shouldShowMenu() && (
-        <View style={[styles.managerMenuLeft, { backgroundColor: primaryColor, borderColor: secondaryColor }]} data-testid="manager-menu-dropdown">
+        <View style={[styles.managerMenuLeft, { backgroundColor: '#0f172a', borderColor: 'rgba(125,211,252,0.18)' }]} data-testid="manager-menu-dropdown">
           {/* Option Menu Restaurant - visible pour admins et staff avec permission menu_restaurant */}
           {(user.role === 'admin' || hasMenuRestaurantAccess()) && (
             <TouchableOpacity 

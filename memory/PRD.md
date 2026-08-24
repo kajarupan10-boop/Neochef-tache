@@ -40,7 +40,19 @@ GitHub repo (private): https://github.com/kajarupan10-boop/Neochef-tache
 
 ## Change log
 
-### 2026-08-24 — Mon compte + Forgot password fix (this session)
+### 2026-08-24 — Traduction Cache (γ) + Drawer dark navy (α)
+- **γ Traduction Cache — TERMINÉ** :
+  - `trigger_translation_regeneration()` **réactivé** (server.py L213) : non-bloquant via `asyncio.create_task`, dédupliqué par restaurant_id (skip si task en cours), timeout global 5 min.
+  - **Content-hash SHA256** ajouté aux deux chemins (endpoint manuel + background) : si les textes du menu sont identiques, aucun appel LLM → réponse `{cached:true}` en ~400ms.
+  - **Modèle upgradé** : `gpt-4.1-mini` → `gpt-5.6-luna` (via emergentintegrations, EMERGENT_LLM_KEY).
+  - 7 langues cibles cachées : EN, ES, DE, IT, ZH, RU, PT.
+  - Validation e2e : fresh generate (~60s LLM), cache-hit (~400ms), GET translations (~245ms), auto-trigger sur POST `/menu-restaurant/items/create` visible dans les logs `[TRANSLATE] Scheduled background translation`.
+- **α Menu déroulant dark navy — TERMINÉ** :
+  - Dans les 3 apps (`neochef-taches/menu/events`) : le drawer hamburger (`managerMenuLeft`) est maintenant hardcodé en `#0f172a` (dark navy) + border `rgba(125,211,252,0.18)`, texte `#e8f1ff`. Ignore désormais les couleurs restaurant pour le chrome — cohérent avec la landing page.
+  - Rebuild Expo × 3 apps validé.
+- **β Thème unifié** : reporté (nécessite décision produit sur les palettes restaurant existantes).
+
+
 - **Bug corrigé**: `POST /api/auth/forgot-password` retournait **500** (`NameError: SENDGRID_FROM_EMAIL is not defined`). Fix: chargement `SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')` à côté de `SENDGRID_API_KEY` dans `/app/backend/server.py`. Le flow backend complet (forgot → verify → reset → login) fonctionne. **⚠️ SendGrid retourne 401 Unauthorized** (clé API révoquée/invalide) — user choix **B** = skip pour l'instant.
 - **Feature "Mon compte"** :
   - Backend : ajouts `POST /api/auth/change-email` (nécessite current_password, gère 409 doublon), `POST /api/auth/update-profile` (change name). Endpoint existant `POST /api/auth/change-password` réutilisé.

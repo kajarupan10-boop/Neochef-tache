@@ -67,11 +67,14 @@ async def regenerate_translations_background(restaurant_id: str):
         logging.error(f"Background translation error for {restaurant_id}: {e}")
 
 async def _do_regenerate_translations(restaurant_id: str):
-    """Internal function to perform translations"""
+    """Internal function to perform translations.
+    Skips work if the content hash matches the previously translated hash.
+    """
     try:
+        import hashlib
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         
-        logging.info(f"Auto-regenerating translations for restaurant {restaurant_id}")
+        logging.info(f"[TRANSLATE] Auto-regenerating translations for restaurant {restaurant_id}")
         
         # Get all menu sections for this restaurant
         sections = await menu_restaurant_sections_collection.find(
@@ -139,6 +142,19 @@ async def _do_regenerate_translations(restaurant_id: str):
         if not texts_to_translate:
             return
         
+        # ----- Content hash short-circuit -----
+        # If the exact same texts were translated before, skip the whole thing.
+        content_hash = hashlib.sha256(
+            "\x1f".join(texts_to_translate).encode("utf-8")
+        ).hexdigest()
+        existing = await translations_collection.find_one(
+            {"restaurant_id": restaurant_id, "content_hash": content_hash},
+            {"_id": 0, "content_hash": 1}
+        )
+        if existing:
+            logging.info(f"[TRANSLATE] Cache hit for {restaurant_id} (hash={content_hash[:12]}), skipping LLM calls")
+            return
+        
         # Target languages
         target_languages = {
             'en': 'English',
@@ -170,7 +186,7 @@ Items: {batch}"""
                         api_key=os.environ.get('EMERGENT_LLM_KEY'),
                         session_id=f"translation_{restaurant_id}_{lang_code}",
                         system_message="You are a translator."
-                    ).with_model("openai", "gpt-4.1-mini")
+                    ).with_model("openai", "gpt-5.6-luna")
                     
                     user_message = UserMessage(text=prompt)
                     response = await chat.send_message(user_message)
@@ -197,12 +213,13 @@ Items: {batch}"""
             {"$set": {
                 "restaurant_id": restaurant_id,
                 "translations": all_translations,
+                "content_hash": content_hash,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }},
             upsert=True
         )
         
-        logging.info(f"Auto-translation complete for restaurant {restaurant_id}: {len(texts_to_translate)} texts")
+        logging.info(f"[TRANSLATE] Auto-translation complete for {restaurant_id}: {len(texts_to_translate)} texts, hash={content_hash[:12]}")
         
     except Exception as e:
         logging.error(f"Translation process error: {e}")
@@ -211,10 +228,27 @@ Items: {batch}"""
 _pending_translation_tasks: Dict[str, asyncio.Task] = {}
 
 def trigger_translation_regeneration(restaurant_id: str):
-    """Trigger background translation regeneration for a restaurant - DISABLED for performance
-    Translations are too slow and block the server. Users should trigger translations manually."""
-    # DISABLED: translations were causing server hangs
-    logging.info(f"Translation regeneration skipped for restaurant {restaurant_id} (auto-translation disabled)")
+    """Trigger background translation regeneration for a restaurant.
+    Non-blocking: fires asyncio task that runs in background. Deduplicated:
+    if a task is already running for this restaurant, skips.
+    The actual translation body checks a content-hash and skips if unchanged.
+    """
+    try:
+        if not restaurant_id:
+            return
+        existing = _pending_translation_tasks.get(restaurant_id)
+        if existing and not existing.done():
+            logging.info(f"[TRANSLATE] Skip: task already running for {restaurant_id}")
+            return
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(regenerate_translations_background(restaurant_id))
+        _pending_translation_tasks[restaurant_id] = task
+        def _clear(_t):
+            _pending_translation_tasks.pop(restaurant_id, None)
+        task.add_done_callback(_clear)
+        logging.info(f"[TRANSLATE] Scheduled background translation for {restaurant_id}")
+    except Exception as e:
+        logging.error(f"[TRANSLATE] Failed to schedule for {restaurant_id}: {e}")
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection with error handling
@@ -2033,6 +2067,19 @@ async def generate_restaurant_translations(restaurant_id: str):
     if not texts_to_translate:
         return {"message": "No items to translate"}
     
+    # Content-hash short-circuit: if same texts already translated, skip
+    import hashlib
+    content_hash = hashlib.sha256(
+        "\x1f".join(texts_to_translate).encode("utf-8")
+    ).hexdigest()
+    existing = await translations_collection.find_one(
+        {"restaurant_id": restaurant_id, "content_hash": content_hash},
+        {"_id": 0, "translations": 1}
+    )
+    if existing and existing.get("translations"):
+        logging.info(f"[TRANSLATE] Cache hit (manual) for {restaurant_id}, skip LLM (hash={content_hash[:12]})")
+        return {"message": "Translations already up to date (cache hit)", "languages": list(existing["translations"].keys()), "cached": True}
+    
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Translation service not configured")
@@ -2054,7 +2101,7 @@ Keep food item names authentic when appropriate (e.g., 'Tiramisu' stays 'Tiramis
 Maintain formatting and punctuation.
 Return ONLY the translations, one per line, in the same order as the input.
 Do not add numbers, bullets, or any extra formatting."""
-            ).with_model("openai", "gpt-4.1-mini")
+            ).with_model("openai", "gpt-5.6-luna")
             
             # Batch translate (max 50 at a time)
             lang_translations = {}
@@ -2089,12 +2136,13 @@ Do not add numbers, bullets, or any extra formatting."""
         {"$set": {
             "restaurant_id": restaurant_id,
             "translations": all_translations,
+            "content_hash": content_hash,
             "updated_at": datetime.now(timezone.utc)
         }},
         upsert=True
     )
     
-    return {"message": "Translations generated", "languages": list(all_translations.keys())}
+    return {"message": "Translations generated", "languages": list(all_translations.keys()), "cached": False}
 
 @api_router.post("/translate")
 async def translate_menu_items(request: TranslationRequest):

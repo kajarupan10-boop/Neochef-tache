@@ -1378,9 +1378,9 @@ export default function MiseEnPlaceApp() {
         </View>
       )}
 
-      {/* Menu déroulant - positionné à gauche */}
+      {/* Menu déroulant - positionné à gauche (chrome dark navy fixe pour cohérence) */}
       {showManagerMenu && shouldShowMenu() && (
-        <View style={[styles.managerMenuLeft, { backgroundColor: primaryColor, borderColor: secondaryColor }]} data-testid="manager-menu-dropdown">
+        <View style={[styles.managerMenuLeft, { backgroundColor: '#0f172a', borderColor: 'rgba(125,211,252,0.18)' }]} data-testid="manager-menu-dropdown">
           {/* Option Tâches - visible pour admins et staff avec permission tâches */}
           {(user.role === 'admin' || hasTachesAccess()) && (
             <TouchableOpacity 
@@ -1388,8 +1388,8 @@ export default function MiseEnPlaceApp() {
               onPress={() => { setShowManagerMenu(false); setCurrentScreen('daily'); }}
               data-testid="menu-item-tasks"
             >
-              <Text style={{ color: secondaryColor, fontSize: 18, width: 28 }}>📝</Text>
-              <Text style={[styles.managerMenuText, { color: secondaryColor }]}>Tâches</Text>
+              <Text style={{ color: '#e8f1ff', fontSize: 18, width: 28 }}>📝</Text>
+              <Text style={[styles.managerMenuText, { color: '#e8f1ff' }]}>Tâches</Text>
             </TouchableOpacity>
           )}
           {/* Option Préparation de Commande - visible pour admins et staff avec permission */}
@@ -1399,8 +1399,8 @@ export default function MiseEnPlaceApp() {
               onPress={() => { setShowManagerMenu(false); setCurrentScreen('orderPrep'); loadSuppliers(); loadSupplierProducts(); loadSupplierOrders(); }}
               data-testid="menu-item-order-prep"
             >
-              <Text style={{ color: secondaryColor, fontSize: 18, width: 28 }}>📦</Text>
-              <Text style={[styles.managerMenuText, { color: secondaryColor }]}>Préparation de commande</Text>
+              <Text style={{ color: '#e8f1ff', fontSize: 18, width: 28 }}>📦</Text>
+              <Text style={[styles.managerMenuText, { color: '#e8f1ff' }]}>Préparation de commande</Text>
             </TouchableOpacity>
           )}
         </View>
