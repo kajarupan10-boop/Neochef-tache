@@ -4,157 +4,374 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
     <meta name="theme-color" content="#0b1220" />
-    <title>NeoChef — Choisir une application</title>
-    <link rel="icon" href="/taches/favicon.ico" />
-    <link rel="apple-touch-icon" href="/taches/apple-touch-icon.png" />
+    <title>NeoChef</title>
+    <link rel="icon" href="/neochef-logo.png" />
+    <link rel="apple-touch-icon" href="/neochef-logo.png" />
     <style>
         *,*::before,*::after { box-sizing: border-box; }
-        html, body { height: 100%; }
+        html, body { height: 100%; margin: 0; }
         body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
             background:
-                radial-gradient(1200px 800px at 15% -10%, rgba(46, 197, 191, 0.18), transparent 60%),
-                radial-gradient(900px 600px at 90% 110%, rgba(120, 88, 220, 0.22), transparent 55%),
+                radial-gradient(1200px 800px at 15% -10%, rgba(46, 197, 191, 0.20), transparent 60%),
+                radial-gradient(900px 600px at 90% 110%, rgba(45, 108, 240, 0.25), transparent 55%),
                 #0b1220;
             color: #e8f1ff;
             min-height: 100vh;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 32px 20px;
+            padding: 24px;
         }
-        .stage {
-            width: 100%;
-            max-width: 980px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 8px;
-        }
-        .brand-mark {
-            width: 56px; height: 56px; border-radius: 14px;
-            background: linear-gradient(140deg, #1fd6bf, #2f80ff 55%, #7a5cff);
-            display: grid; place-items: center;
-            box-shadow: 0 10px 30px rgba(47, 128, 255, 0.25), inset 0 0 0 1px rgba(255,255,255,0.15);
-        }
-        .brand-mark span {
-            font-weight: 800; font-size: 26px; color: white; letter-spacing: 0.5px;
-        }
-        h1 {
-            margin: 0;
-            font-size: clamp(28px, 4.4vw, 42px);
-            letter-spacing: -0.02em;
-            font-weight: 800;
-            background: linear-gradient(180deg, #ffffff, #b6cbff 90%);
+        .stage { width: 100%; max-width: 440px; }
+        /* ===== HEADER LOGO ===== */
+        .brand { text-align: center; margin-bottom: 32px; }
+        .brand img { width: 128px; height: 128px; object-fit: contain; filter: drop-shadow(0 8px 24px rgba(46,197,191,0.35)); }
+        .brand h1 {
+            margin: 8px 0 4px; font-size: 32px; font-weight: 800; letter-spacing: -0.02em;
+            background: linear-gradient(180deg, #ffffff, #7dd3fc 100%);
             -webkit-background-clip: text; background-clip: text; color: transparent;
         }
-        .subtitle {
-            margin: 14px 0 40px;
-            color: #9db0d0;
-            font-size: 15px;
-            text-align: center;
-            max-width: 620px;
-            line-height: 1.55;
-        }
-        .grid {
-            display: grid;
-            gap: 18px;
-            width: 100%;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        }
+        .brand p { margin: 0; color: #94a3c4; font-size: 13.5px; }
+
+        /* ===== LOGIN CARD ===== */
         .card {
-            display: flex; flex-direction: column;
-            padding: 22px 22px 20px;
-            border-radius: 18px;
             background: rgba(255,255,255,0.04);
             border: 1px solid rgba(255,255,255,0.08);
-            backdrop-filter: blur(10px);
-            text-decoration: none; color: inherit;
+            border-radius: 20px;
+            padding: 28px 24px;
+            backdrop-filter: blur(12px);
+        }
+        .field { display: flex; flex-direction: column; margin-bottom: 14px; }
+        .field label { font-size: 12px; color: #94a3c4; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .field input {
+            width: 100%; padding: 14px 16px; border-radius: 12px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #e8f1ff; font-size: 15px; font-family: inherit;
+            transition: border-color .15s ease, background .15s ease;
+        }
+        .field input:focus { outline: none; border-color: #1fd6bf; background: rgba(255,255,255,0.09); }
+        .field input::placeholder { color: #5a6b8c; }
+        .btn-primary {
+            width: 100%; margin-top: 6px; padding: 14px 18px; border-radius: 12px; border: none; cursor: pointer;
+            background: linear-gradient(140deg, #1fd6bf 0%, #2f80ff 100%);
+            color: white; font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
+            transition: transform .15s ease, box-shadow .15s ease;
+            box-shadow: 0 8px 24px rgba(31,214,191,0.25);
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(31,214,191,0.35); }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.6; cursor: wait; }
+        .error {
+            margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+            background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5; font-size: 13px; text-align: center; display: none;
+        }
+        .error.show { display: block; }
+        .footer-links { text-align: center; margin-top: 16px; font-size: 13px; color: #94a3c4; }
+        .footer-links a { color: #7dd3fc; text-decoration: none; }
+        .footer-links a:hover { text-decoration: underline; }
+
+        /* ===== MODULE SELECTOR (post-login) ===== */
+        #module-view { display: none; }
+        .welcome {
+            text-align: center; margin-bottom: 24px;
+        }
+        .welcome-eyebrow { font-size: 12px; color: #7dd3fc; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+        .welcome h2 { margin: 6px 0 4px; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
+        .welcome p { margin: 0; color: #94a3c4; font-size: 13.5px; }
+        .grid {
+            display: grid; gap: 14px;
+            grid-template-columns: 1fr 1fr;
+        }
+        .tile {
+            display: flex; flex-direction: column; align-items: flex-start;
+            padding: 20px 18px; border-radius: 18px; cursor: pointer;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
             transition: transform .18s ease, border-color .18s ease, background .18s ease;
+            text-decoration: none; color: inherit;
+            min-height: 128px;
             position: relative; overflow: hidden;
         }
-        .card::before {
-            content: "";
-            position: absolute; inset: 0;
-            background: radial-gradient(400px 200px at var(--mx,50%) var(--my,0%), rgba(255,255,255,0.08), transparent 60%);
-            opacity: 0; transition: opacity .2s ease;
-            pointer-events: none;
-        }
-        .card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); }
-        .card:hover::before { opacity: 1; }
-        .card .badge {
-            width: 44px; height: 44px; border-radius: 12px;
-            display: grid; place-items: center;
-            margin-bottom: 14px; font-size: 22px;
+        .tile:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.07); }
+        .tile-icon {
+            width: 44px; height: 44px; border-radius: 12px; margin-bottom: 12px;
+            display: grid; place-items: center; font-size: 22px;
             box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
         }
-        .card h2 {
-            margin: 0 0 6px; font-size: 19px; font-weight: 700; letter-spacing: -0.01em;
+        .tile h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+        .tile p { margin: 0; color: #94a3c4; font-size: 12px; line-height: 1.4; }
+        .taches   .tile-icon { background: linear-gradient(140deg, #2ec5bf, #1a807e); color: #eafffb; }
+        .menu     .tile-icon { background: linear-gradient(140deg, #f6a447, #b26212); color: #fff4e0; }
+        .events   .tile-icon { background: linear-gradient(140deg, #7a5cff, #4a3373); color: #eee8ff; }
+        .settings .tile-icon { background: linear-gradient(140deg, #64748b, #334155); color: #e2e8f0; }
+
+        .logout-bar { text-align: center; margin-top: 20px; }
+        .logout-bar button {
+            background: transparent; border: 1px solid rgba(255,255,255,0.12); color: #94a3c4;
+            padding: 8px 16px; border-radius: 8px; font-size: 12px; cursor: pointer;
+            font-family: inherit;
         }
-        .card p {
-            margin: 0; color: #9db0d0; font-size: 13.5px; line-height: 1.5;
-        }
-        .card .cta {
-            margin-top: 16px; font-size: 13px; color: #7dbeff; display: flex; align-items: center; gap: 6px;
-        }
-        .card .cta::after { content: "→"; transition: transform .18s ease; }
-        .card:hover .cta::after { transform: translateX(3px); }
-        .taches .badge { background: linear-gradient(140deg, #2ec5bf, #1a807e); color: #eafffb; }
-        .menu    .badge { background: linear-gradient(140deg, #f6a447, #b26212); color: #fff4e0; }
-        .events  .badge { background: linear-gradient(140deg, #7a5cff, #4a3373); color: #eee8ff; }
-        footer {
-            margin-top: 42px; font-size: 12px; color: #5d6f92;
-        }
-        footer a { color: #7dbeff; text-decoration: none; }
+        .logout-bar button:hover { background: rgba(239,68,68,0.1); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
     </style>
 </head>
 <body>
-    <main class="stage" data-testid="landing-root">
-        <div class="brand">
-            <div class="brand-mark"><span>N</span></div>
-        </div>
+<main class="stage">
+    <!-- Header -->
+    <div class="brand">
+        <img src="/neochef-logo.png" alt="NeoChef" />
         <h1>NeoChef</h1>
-        <p class="subtitle">Choisissez l'application à ouvrir. Chaque module est une application indépendante, connectée au même backend.</p>
+        <p id="brand-tagline">Gestion cuisine et service</p>
+    </div>
 
-        <section class="grid">
-            <a class="card taches" href="/taches/" data-testid="open-taches">
-                <div class="badge">✓</div>
-                <h2>Tâches</h2>
-                <p>Suivi des tâches quotidiennes et préparation de commande pour votre équipe cuisine.</p>
-                <div class="cta">Ouvrir l'app</div>
-            </a>
-            <a class="card menu" href="/menu/" data-testid="open-menu">
-                <div class="badge">🍽</div>
-                <h2>Menu</h2>
-                <p>Menu en cours, fiches techniques, ardoise et menu client — toute la carte au même endroit.</p>
-                <div class="cta">Ouvrir l'app</div>
-            </a>
-            <a class="card events" href="/events/" data-testid="open-events">
-                <div class="badge">◈</div>
-                <h2>Événements</h2>
-                <p>Menu groupe, prestataires et facturation pour vos événements privés.</p>
-                <div class="cta">Ouvrir l'app</div>
-            </a>
-        </section>
+    <!-- ===== LOGIN VIEW ===== -->
+    <section id="login-view" class="card" data-testid="login-view">
+        <form id="login-form" autocomplete="on">
+            <div class="field">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" required autocomplete="username" placeholder="votre@email.com" data-testid="login-email" />
+            </div>
+            <div class="field">
+                <label for="password">Mot de passe</label>
+                <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••" data-testid="login-password" />
+            </div>
+            <button type="submit" class="btn-primary" id="login-submit" data-testid="login-submit">Se connecter</button>
+            <div id="login-error" class="error" data-testid="login-error"></div>
+        </form>
+        <div class="footer-links" style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+            <a href="#" id="go-register-restaurant" data-testid="go-register-restaurant">Créer un restaurant</a>
+            <span style="opacity:0.4">·</span>
+            <a href="#" id="go-register-holding" data-testid="go-register-holding">Créer un groupe (Holding)</a>
+        </div>
+    </section>
 
-        <footer>Backend en ligne · <a href="/api/health" target="_blank" rel="noreferrer">/api/health</a></footer>
-    </main>
+    <!-- ===== REGISTER RESTAURANT VIEW ===== -->
+    <section id="register-restaurant-view" class="card" data-testid="register-restaurant-view" style="display:none;">
+        <form id="register-restaurant-form" autocomplete="off">
+            <div class="field"><label for="rr-restaurant-name">Nom du restaurant</label>
+                <input id="rr-restaurant-name" type="text" required placeholder="Le Cercle" data-testid="rr-restaurant-name" /></div>
+            <div class="field"><label for="rr-name">Votre nom</label>
+                <input id="rr-name" type="text" required placeholder="Nagaratnam" data-testid="rr-name" /></div>
+            <div class="field"><label for="rr-email">Email</label>
+                <input id="rr-email" type="email" required placeholder="admin@restaurant.com" data-testid="rr-email" /></div>
+            <div class="field"><label for="rr-password">Mot de passe</label>
+                <input id="rr-password" type="password" required placeholder="••••••••" data-testid="rr-password" /></div>
+            <button type="submit" class="btn-primary" data-testid="rr-submit">Créer le restaurant</button>
+            <div id="rr-error" class="error" data-testid="rr-error"></div>
+        </form>
+        <div class="footer-links"><a href="#" data-testid="rr-back" class="back-to-login">← Retour à la connexion</a></div>
+    </section>
 
-    <script>
-        document.querySelectorAll('.card').forEach(card => {
-            card.addEventListener('mousemove', e => {
-                const r = card.getBoundingClientRect();
-                card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
-                card.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100) + '%');
+    <!-- ===== REGISTER HOLDING VIEW ===== -->
+    <section id="register-holding-view" class="card" data-testid="register-holding-view" style="display:none;">
+        <form id="register-holding-form" autocomplete="off">
+            <div class="field"><label for="rh-holding-name">Nom du groupe (Holding)</label>
+                <input id="rh-holding-name" type="text" required placeholder="Groupe Naga" data-testid="rh-holding-name" /></div>
+            <div class="field"><label for="rh-name">Votre nom</label>
+                <input id="rh-name" type="text" required placeholder="Nagaratnam" data-testid="rh-name" /></div>
+            <div class="field"><label for="rh-email">Email</label>
+                <input id="rh-email" type="email" required placeholder="admin@groupe.com" data-testid="rh-email" /></div>
+            <div class="field"><label for="rh-password">Mot de passe</label>
+                <input id="rh-password" type="password" required placeholder="••••••••" data-testid="rh-password" /></div>
+            <button type="submit" class="btn-primary" data-testid="rh-submit">Créer le groupe</button>
+            <div id="rh-error" class="error" data-testid="rh-error"></div>
+        </form>
+        <div class="footer-links"><a href="#" data-testid="rh-back" class="back-to-login">← Retour à la connexion</a></div>
+    </section>
+
+    <!-- ===== MODULE SELECTOR (post-login) ===== -->
+    <section id="module-view" data-testid="module-view">
+        <div class="welcome">
+            <div class="welcome-eyebrow" id="welcome-eyebrow">Bienvenue</div>
+            <h2 id="welcome-name">…</h2>
+            <p id="welcome-restaurant">…</p>
+        </div>
+        <div class="grid">
+            <a class="tile taches" href="/taches/" data-testid="tile-taches">
+                <div class="tile-icon">✓</div>
+                <h3>Tâches</h3>
+                <p>Tâches quotidiennes et préparation de commande</p>
+            </a>
+            <a class="tile menu" href="/menu/" data-testid="tile-menu">
+                <div class="tile-icon">🍽</div>
+                <h3>Menu</h3>
+                <p>Menu, fiches techniques, ardoise</p>
+            </a>
+            <a class="tile events" href="/events/" data-testid="tile-events">
+                <div class="tile-icon">◈</div>
+                <h3>Événements</h3>
+                <p>Menu groupe, prestataires, facturation</p>
+            </a>
+            <a class="tile settings" href="/menu/#settings" data-testid="tile-settings">
+                <div class="tile-icon">⚙</div>
+                <h3>Paramètres</h3>
+                <p>Compte, équipe, préférences</p>
+            </a>
+        </div>
+        <div class="logout-bar">
+            <button type="button" id="logout-btn" data-testid="logout-btn">Se déconnecter</button>
+        </div>
+    </section>
+</main>
+
+<script>
+(function() {
+    const TOKEN_KEY = 'session_token';
+    const USER_KEY = 'neochef_user';
+    const RESTAURANT_KEY = 'restaurant_branding';
+
+    const loginView = document.getElementById('login-view');
+    const registerRestView = document.getElementById('register-restaurant-view');
+    const registerHoldView = document.getElementById('register-holding-view');
+    const moduleView = document.getElementById('module-view');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const submitBtn = document.getElementById('login-submit');
+    const welcomeName = document.getElementById('welcome-name');
+    const welcomeRest = document.getElementById('welcome-restaurant');
+
+    function hideAll() {
+        loginView.style.display = 'none';
+        registerRestView.style.display = 'none';
+        registerHoldView.style.display = 'none';
+        moduleView.style.display = 'none';
+    }
+    function showModule(user, restaurant) {
+        hideAll();
+        moduleView.style.display = 'block';
+        welcomeName.textContent = user?.name || user?.email || 'Utilisateur';
+        welcomeRest.textContent = restaurant?.name
+            ? `${restaurant.name}${user?.holding_name ? ' · ' + user.holding_name : ''}`
+            : (user?.holding_name || 'Aucun restaurant');
+    }
+    function showLogin() {
+        hideAll();
+        loginView.style.display = 'block';
+        loginError.classList.remove('show');
+    }
+    function showError(msg) {
+        loginError.textContent = msg;
+        loginError.classList.add('show');
+    }
+    function showRegisterRestaurant() { hideAll(); registerRestView.style.display = 'block'; }
+    function showRegisterHolding() { hideAll(); registerHoldView.style.display = 'block'; }
+    function persistSession(data) {
+        localStorage.setItem(TOKEN_KEY, data.session_token);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        if (data.restaurant) localStorage.setItem(RESTAURANT_KEY, JSON.stringify(data.restaurant));
+    }
+
+    // Register-restaurant / holding link + back link handlers
+    document.getElementById('go-register-restaurant').addEventListener('click', e => { e.preventDefault(); showRegisterRestaurant(); });
+    document.getElementById('go-register-holding').addEventListener('click', e => { e.preventDefault(); showRegisterHolding(); });
+    document.querySelectorAll('.back-to-login').forEach(el => el.addEventListener('click', e => { e.preventDefault(); showLogin(); }));
+
+    async function registerRestaurant(ev) {
+        ev.preventDefault();
+        const err = document.getElementById('rr-error');
+        err.classList.remove('show');
+        const btn = registerRestView.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Création…';
+        try {
+            const res = await fetch('/api/auth/register-admin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+                restaurant_name: document.getElementById('rr-restaurant-name').value.trim(),
+                name: document.getElementById('rr-name').value.trim(),
+                email: document.getElementById('rr-email').value.trim(),
+                password: document.getElementById('rr-password').value,
+            }) });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data?.detail || 'Erreur de création'; err.classList.add('show'); return; }
+            persistSession(data);
+            showModule(data.user, data.restaurant);
+        } catch (e) { err.textContent = 'Erreur réseau'; err.classList.add('show'); }
+        finally { btn.disabled = false; btn.textContent = 'Créer le restaurant'; }
+    }
+    async function registerHolding(ev) {
+        ev.preventDefault();
+        const err = document.getElementById('rh-error');
+        err.classList.remove('show');
+        const btn = registerHoldView.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Création…';
+        try {
+            const res = await fetch('/api/auth/register-holding', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+                holding_name: document.getElementById('rh-holding-name').value.trim(),
+                name: document.getElementById('rh-name').value.trim(),
+                email: document.getElementById('rh-email').value.trim(),
+                password: document.getElementById('rh-password').value,
+            }) });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data?.detail || 'Erreur de création'; err.classList.add('show'); return; }
+            persistSession(data);
+            showModule(data.user, data.restaurant);
+        } catch (e) { err.textContent = 'Erreur réseau'; err.classList.add('show'); }
+        finally { btn.disabled = false; btn.textContent = 'Créer le groupe'; }
+    }
+    document.getElementById('register-restaurant-form').addEventListener('submit', registerRestaurant);
+    document.getElementById('register-holding-form').addEventListener('submit', registerHolding);
+
+    async function attemptSessionRestore() {
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (!token) { showLogin(); return; }
+        try {
+            const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!res.ok) { localStorage.removeItem(TOKEN_KEY); showLogin(); return; }
+            const data = await res.json();
+            localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+            if (data.restaurant) localStorage.setItem(RESTAURANT_KEY, JSON.stringify(data.restaurant));
+            showModule(data.user, data.restaurant);
+        } catch (e) {
+            console.error('[Session restore]', e);
+            showLogin();
+        }
+    }
+
+    loginForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        loginError.classList.remove('show');
+        submitBtn.disabled = true; submitBtn.textContent = 'Connexion…';
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
             });
+            const data = await res.json();
+            if (!res.ok) {
+                showError(data?.detail || 'Identifiants incorrects');
+                return;
+            }
+            persistSession(data);
+            showModule(data.user, data.restaurant);
+        } catch (e) {
+            console.error('[Login]', e);
+            showError('Erreur réseau, réessayez.');
+        } finally {
+            submitBtn.disabled = false; submitBtn.textContent = 'Se connecter';
+        }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem(RESTAURANT_KEY);
+        showLogin();
+    });
+
+    // Before navigating to a sub-app, ensure the token is in its AsyncStorage-backed localStorage key
+    document.querySelectorAll('.tile').forEach(t => {
+        t.addEventListener('click', (e) => {
+            const token = localStorage.getItem(TOKEN_KEY);
+            if (!token) { e.preventDefault(); showLogin(); }
+            // AsyncStorage on web uses localStorage — key 'session_token' is already there, sub-apps will pick it up.
         });
-    </script>
+    });
+
+    attemptSessionRestore();
+})();
+</script>
 </body>
 </html>

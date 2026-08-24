@@ -1,0 +1,45 @@
+{
+  "summary": "Frontend-only testing of the new unified NeoChef landing (/app/scripts/landing-index.html deployed to /app/frontend/build/index.html). All 6 requested behaviours PASS: (1) root URL shows login-view first with empty localStorage and the real NeoChef logo loads (1024x1024, /neochef-logo.png, HTTP 200); (2) groupenaga@gmail.com / LeCercle123! logs in -> login-view hides, module-view shows 4 tiles + welcome 'Nagaratnam' / \"O'Parloir · Groupe Naga\"; (3) wrong password shows red banner with backend message 'Invalid credentials', stays on login-view, no token written to localStorage; (4) reload while logged in auto-restores session via GET /api/auth/me and lands directly on module-view; (5) all 4 tiles clickable with correct hrefs - Taches -> /taches/, Menu -> /menu/, Events -> /events/ all loaded their sub-app content WITHOUT any re-login (session_token shared through localStorage), Settings -> /menu/#settings as intended; (6) 'Se deconnecter' clears session_token + neochef_user + restaurant_branding and returns to login-view (persists across reload). Also verified staff account tharshikan@orange.fr / Kajan1012 (welcome 'Tharshan' / 'Le Cercle', all 4 tiles visible) and mobile 390x844 layout (2x2 tile grid, no horizontal overflow). Backend testing skipped per request. Deployed build/index.html is byte-identical in behaviour to the canonical scripts/landing-index.html.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Landing (login + module views)",
+        "issues": [
+          "The /neochef-logo.png asset has an OPAQUE BLACK square background instead of transparency, so a hard-edged black box is clearly visible on top of the dark-navy/teal gradient (see screenshots 01_login / 03_modules). Export the logo with an alpha channel, or apply a matching rounded container/border-radius + background to hide the seam.",
+          "Cosmetic: on reload while logged in, the login card renders for ~200-500ms before GET /api/auth/me resolves, causing a visible flash of the login form. Consider hiding both views until attemptSessionRestore() settles (e.g. a neutral loading state)."
+        ]
+      },
+      {
+        "screen": "Sub-apps (/taches/, /menu/, /events/)",
+        "issues": [
+          "UX gap (not in scope of this request, informational): once inside a sub-app there is no visible 'back to NeoChef hub' control, so the user must edit the URL / use browser back to return to the 4-tile module selector. Consider adding a home/hub affordance in the sub-app header to complete the 'one app, several sections' feel."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Replace /app/frontend/build/neochef-logo.png with a transparent-background PNG (or wrap it in a rounded container) - the black square is the only clearly visible visual defect on the new landing.",
+    "Optional polish: avoid the login-form flash during session restore by gating both views behind a short loading state.",
+    "Optional UX: add a 'return to hub' link inside /taches/, /menu/, /events/ headers."
+  ],
+  "critical_code_review_comments": [
+    "landing-index.html reads data.detail for login errors - FastAPI HTTPException shape is correct here, but if the backend ever returns a validation error (422) detail is an array of objects and the banner would render '[object Object]'. Coerce with a typeof check.",
+    "attemptSessionRestore() removes session_token on a non-OK /api/auth/me but leaves neochef_user and restaurant_branding stale in localStorage; sub-apps reading those keys could show stale branding. Clear all three.",
+    "The landing is a duplicated file (scripts/landing-index.html vs frontend/build/index.html). Any future edit must be applied twice - consider a build/copy step so the two cannot drift."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% (6/6 requested flows passing)"},
+  "seed_data_creation": "None - used existing accounts from /app/memory/test_credentials.md only.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (holding, works); tharshikan@orange.fr / Kajan1012 (staff, works). Both verified against the new landing login.",
+  "context_for_next_testing_agent": "New unified entry point at / is plain HTML/JS with reliable data-testids: login-view, login-email, login-password, login-submit, login-error, module-view, tile-taches, tile-menu, tile-events, tile-settings, logout-btn. Session is shared with the Expo sub-apps via localStorage['session_token'] and this works - no re-login when entering /taches/, /menu/, /events/. Remember to localStorage.clear() + reload before asserting the login-first behaviour. Sub-app internal flows are covered by iterations 10-13; only remaining landing item is the non-transparent logo PNG.",
+  "rca_of_the_issue": "No functional defect found. The black box behind the logo is an asset problem, not a CSS problem: the source PNG (copied from backend/dist.old assets, 1024x1024) was flattened onto a black matte, so object-fit/drop-shadow cannot remove it."
+}
