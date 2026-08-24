@@ -1,0 +1,54 @@
+{
+  "summary": "Backend-only regression test of the iteration-16 event-loop starvation fix. VERIFIED FIXED: POST /api/public/translations/rest_efb3705687ef/generate now returns HTTP 202 in 92-203ms with body {message, restaurant_id}, and /health stayed at 1-2ms for 26+ consecutive probes over ~15 minutes while a REAL 7-language LLM translation ran in the background (litellm calls confirmed in logs at the same timestamps). Previously /health hung for 10-14 min. asyncio.to_thread offload works. 29/34 tests pass in /app/backend/tests/test_coldstart_regression.py (1 gated skip). NEW HIGH bug found: the background translation NEVER completes for Le Cercle - regenerate_translations_background wraps the whole run in asyncio.wait_for(timeout=300s) but a full 232-item x 7-language run needs >15 min, and results are only persisted after ALL languages finish, so the cache is never written (log: 'Translation timed out for restaurant rest_efb3705687ef' at 14:27:59, 300s after start). Consequence: GET /api/public/translations/rest_efb3705687ef returns {} (0 languages) and the public client menu has no translations. Also found a legacy-schema read bug: 5 mep_translations docs store languages at top level (no 'translations' wrapper) so GET returns {} for them.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "background: regenerate_translations_background (server.py:48-66) + GET /api/public/translations/{id}",
+        "issue": "Translation run is killed by the hard 300s asyncio.wait_for timeout while a Le Cercle run takes >15 min (7 languages x ~16 batches x 6-13s, strictly sequential). Because translations_collection.update_one runs only AFTER all languages complete, partial work is discarded and the cache is never populated -> GET /api/public/translations/rest_efb3705687ef returns {} (verified repeatedly at 14:18, 14:23 runs). Fix: persist per-language incrementally, run the 7 languages concurrently (asyncio.gather with a semaphore), and raise/remove the global timeout (per-call timeout instead).",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/public/translations/{restaurant_id}",
+        "issue": "Reads only cached.get('translations', {}), but 5 legacy docs (rest_963812abe3f4, rest_f6975289d8af, rest_890ff5f77e8d, rest_bec1e837aa4a, rest_3b7aad7c27be) store lang keys at document top level -> endpoint returns {} and those restaurants silently lose all translations. Needs backward-compatible read or a data migration."
+      },
+      {
+        "endpoint": "background LLM offload (asyncio.to_thread(_blocking_call))",
+        "issue": "When asyncio.wait_for cancels the task, the worker thread running asyncio.run(chat.send_message) is NOT cancellable - litellm calls kept firing in the logs after 'Translation timed out' (wasted LLM budget, orphan threads). Add a per-call timeout inside the thread and a global concurrency guard."
+      },
+      {
+        "endpoint": "POST /api/public/translations/{id}/generate",
+        "issue": "Unauthenticated and always returns 202 even when the request is silently dropped ('Skip: task already running'). Caller cannot distinguish scheduled vs skipped; also no rate limiting on a public endpoint that starts expensive LLM work."
+      },
+      {
+        "endpoint": "mep_translations doc for rest_17e485265f52",
+        "issue": "Doc persisted with translations = {} (empty) from an earlier budget-exceeded run, so O'Parloir also serves no translations."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_coldstart_regression.py",
+    "/app/test_reports/pytest/iteration17.xml"
+  ],
+  "action_items": [
+    "Persist translations per language (incremental upsert) and increase/remove the 300s global timeout so Le Cercle's cache can actually be populated; parallelize the 7 languages with asyncio.gather + semaphore",
+    "Make GET /api/public/translations/{id} backward compatible with legacy top-level-language docs (or migrate the 5 docs)",
+    "Add a per-LLM-call timeout inside the offloaded thread so cancelled tasks stop consuming LLM budget",
+    "Consider auth/rate-limit on public POST /generate and return a status indicating scheduled vs skipped"
+  ],
+  "critical_code_review_comments": [
+    "server.py:56-59 - asyncio.wait_for(300s) around the entire multi-language translation makes the feature unusable for large menus; the all-or-nothing save at the end guarantees zero output on timeout.",
+    "server.py:183-198 pattern `asyncio.to_thread(lambda: asyncio.run(chat.send_message(...)))` correctly unblocks the loop but creates a new event loop per call and is uncancellable; prefer litellm.acompletion/async client when available.",
+    "server.py is ~18.9k lines - should be split into routers/services modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_coldstart_regression.py"],
+  "success_rate": {"backend": "85% (29/34 tests; the 4 failures all trace to the single translation-persistence bug)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None. Password/profile changes were rolled back inside the tests; the translation content_hash fixture restores the original doc (no doc existed for Le Cercle).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (from /app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "Event-loop starvation is FIXED - re-verify with `pytest tests/test_coldstart_regression.py -k test_health_latency_during_background_translation -s` (prints trigger latency + 8 health latencies). IMPORTANT: editing any file under /app/backend triggers uvicorn --reload, which kills running background translation tasks and produces a one-off ~1.7s /health spike; do not edit backend files while measuring. Remaining 4 failures are all about translation cache never being written (300s timeout + all-or-nothing save) and legacy doc schema. All auth flows (login, change-password roundtrip, change-email 401 on wrong password, update-profile, forgot-password), all 4 health endpoints, public menu APIs and /client/{id} HTML pass.",
+  "rca_of_the_issue": "Fix verification: LlmChat.send_message (sync litellm under the hood) is now executed via asyncio.to_thread, so the uvicorn event loop stays free - /health measured 1-2ms across ~15 min of continuous LLM work (previously connection hangs). New RCA: _do_regenerate_translations translates 7 languages sequentially (~16 batches each, 6-13s per litellm call => >15 min for Le Cercle's 232 items) but regenerate_translations_background caps it at 300s via asyncio.wait_for and the DB upsert happens only after the final language, so every run is aborted with zero persisted output (log line 'Translation timed out for restaurant rest_efb3705687ef')."
+}

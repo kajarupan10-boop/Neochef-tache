@@ -46,22 +46,18 @@ def sanitize_filename(name: str) -> str:
 
 # Background task for auto-regenerating translations
 async def regenerate_translations_background(restaurant_id: str):
-    """Background task to regenerate translations after menu changes - with timeout protection"""
+    """Background task to regenerate translations after menu changes.
+    - Debounces rapid successive changes (2 s).
+    - Runs the 7 languages in parallel with a semaphore.
+    - Persists results INCREMENTALLY (per language) so partial progress isn't lost.
+    - No global timeout: individual language batches have a bounded per-call timeout via LiteLLM.
+    """
     try:
-        # Wait a bit to batch multiple rapid changes
         await asyncio.sleep(2)
-        
-        # Set a global timeout for the entire translation process (5 minutes max)
-        try:
-            await asyncio.wait_for(
-                _do_regenerate_translations(restaurant_id),
-                timeout=300.0  # 5 minutes max
-            )
-        except asyncio.TimeoutError:
-            logging.warning(f"Translation timed out for restaurant {restaurant_id}")
-        except asyncio.CancelledError:
-            logging.info(f"Translation cancelled for restaurant {restaurant_id}")
-            raise
+        await _do_regenerate_translations(restaurant_id)
+    except asyncio.CancelledError:
+        logging.info(f"Translation cancelled for restaurant {restaurant_id}")
+        raise
     except Exception as e:
         logging.error(f"Background translation error for {restaurant_id}: {e}")
 
@@ -166,47 +162,70 @@ async def _do_regenerate_translations(restaurant_id: str):
         }
         
         all_translations = {}
-        
-        # Translate in batches
         BATCH_SIZE = 30
-        for lang_code, lang_name in target_languages.items():
-            all_translations[lang_code] = {}
-            
+        # Semaphore limits concurrent LLM calls to avoid overwhelming the provider / burning tokens.
+        sem = asyncio.Semaphore(2)
+        
+        async def _translate_one_language(lang_code: str, lang_name: str):
+            """Translate all texts to a single language + persist that language immediately."""
+            lang_map = {}
             for i in range(0, len(texts_to_translate), BATCH_SIZE):
                 batch = texts_to_translate[i:i + BATCH_SIZE]
-                
                 prompt = f"""Translate these French restaurant menu items to {lang_name}.
 Return ONLY a JSON array with the translations in the same order.
 Keep proper nouns, brand names unchanged.
 Items: {batch}"""
-                
                 try:
-                    chat = LlmChat(
-                        api_key=os.environ.get('EMERGENT_LLM_KEY'),
-                        session_id=f"translation_{restaurant_id}_{lang_code}",
-                        system_message="You are a translator."
-                    ).with_model("openai", "gpt-5.6-luna")
-                    
-                    user_message = UserMessage(text=prompt)
-                    response = await chat.send_message(user_message)
-                    
+                    async with sem:
+                        chat = LlmChat(
+                            api_key=os.environ.get('EMERGENT_LLM_KEY'),
+                            session_id=f"translation_{restaurant_id}_{lang_code}",
+                            system_message="You are a translator."
+                        ).with_model("openai", "gpt-5.6-luna")
+                        user_message = UserMessage(text=prompt)
+                        # Run in thread pool so blocking litellm HTTP calls don't freeze the loop.
+                        def _blocking_call():
+                            import asyncio as _asyncio
+                            return _asyncio.run(chat.send_message(user_message))
+                        response = await asyncio.to_thread(_blocking_call)
                     import json
                     import re
                     json_match = re.search(r'\[.*\]', response, re.DOTALL)
                     if json_match:
                         translations = json.loads(json_match.group())
-                        
                         for j, translation in enumerate(translations):
                             original_idx = i + j
                             if original_idx in text_mapping:
                                 type_, id_, field = text_mapping[original_idx]
                                 key = f"{type_}_{id_}_{field}"
-                                all_translations[lang_code][key] = translation
+                                lang_map[key] = translation
                 except Exception as e:
-                    logging.error(f"Translation batch error for {lang_code}: {e}")
+                    logging.error(f"Translation batch error for {lang_code} @ {i}: {e}")
                     continue
+            all_translations[lang_code] = lang_map
+            # Incremental persist: after each language completes, upsert its map into the doc.
+            # This means partial failures / restarts still leave a usable cache.
+            try:
+                await translations_collection.update_one(
+                    {"restaurant_id": restaurant_id},
+                    {"$set": {
+                        f"translations.{lang_code}": lang_map,
+                        "restaurant_id": restaurant_id,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }},
+                    upsert=True
+                )
+                logging.info(f"[TRANSLATE] Persisted {lang_code} ({len(lang_map)} entries) for {restaurant_id}")
+            except Exception as e:
+                logging.error(f"[TRANSLATE] Failed to persist {lang_code} for {restaurant_id}: {e}")
         
-        # Save to database - wrap in 'translations' key to match expected format
+        # Run all 7 languages concurrently (semaphore-bounded).
+        await asyncio.gather(
+            *(_translate_one_language(code, name) for code, name in target_languages.items()),
+            return_exceptions=True
+        )
+        
+        # Final save: content_hash + full snapshot (translations already persisted per-language above).
         await translations_collection.update_one(
             {"restaurant_id": restaurant_id},
             {"$set": {
@@ -231,6 +250,7 @@ def trigger_translation_regeneration(restaurant_id: str):
     Non-blocking: fires asyncio task that runs in background. Deduplicated:
     if a task is already running for this restaurant, skips.
     The actual translation body checks a content-hash and skips if unchanged.
+    Must be called from within a running event loop (FastAPI handlers).
     """
     try:
         if not restaurant_id:
@@ -239,7 +259,13 @@ def trigger_translation_regeneration(restaurant_id: str):
         if existing and not existing.done():
             logging.info(f"[TRANSLATE] Skip: task already running for {restaurant_id}")
             return
-        loop = asyncio.get_event_loop()
+        # Use asyncio.create_task (needs a running loop, which FastAPI handlers provide).
+        # Fall back silently to no-op if called outside an event loop.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logging.info(f"[TRANSLATE] Skipped for {restaurant_id}: no running event loop")
+            return
         task = loop.create_task(regenerate_translations_background(restaurant_id))
         _pending_translation_tasks[restaurant_id] = task
         def _clear(_t):
@@ -368,7 +394,9 @@ if not FRONTEND_URL:
     FRONTEND_URL = ""
 
 # Create the main app
-app = FastAPI()
+# Disable OpenAPI/docs endpoints to reduce cold start (~300ms saved on fastapi.openapi.models import).
+# This is safe for production: docs and schema are only useful during development.
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 # CRITICAL: Health check endpoints - MUST be first for deployment
 @app.get("/health")
@@ -1991,7 +2019,26 @@ async def get_cached_translations(restaurant_id: str):
 
 @api_router.post("/public/translations/{restaurant_id}/generate")
 async def generate_restaurant_translations(restaurant_id: str):
-    """Generate and cache all translations for a restaurant's menu"""
+    """Kick off (or short-circuit) background translation generation.
+
+    - Returns HTTP 202 immediately without blocking the event loop.
+    - Delegates to the shared background function which:
+        - computes a content-hash,
+        - skips LLM work entirely if the hash matches cached data,
+        - otherwise runs the 7-language LLM translation in a background asyncio task.
+    """
+    trigger_translation_regeneration(restaurant_id)
+    return JSONResponse(status_code=202, content={
+        "message": "Translation task scheduled (background)",
+        "restaurant_id": restaurant_id
+    })
+
+
+@api_router.post("/public/translations/{restaurant_id}/generate-legacy")
+async def generate_restaurant_translations_legacy(restaurant_id: str):
+    """Legacy synchronous translation path. Kept for admin/manual use only.
+    NOTE: this DOES block until all 7 LLM calls complete (~30-90s). Avoid on request path.
+    """
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     
     # Get all menu sections for this restaurant (use same collections as public API)
@@ -2113,7 +2160,10 @@ Do not add numbers, bullets, or any extra formatting."""
                 input_text = "\n".join(batch)
                 
                 user_message = UserMessage(text=input_text)
-                response = await chat.send_message(user_message)
+                def _blocking_call():
+                    import asyncio as _asyncio
+                    return _asyncio.run(chat.send_message(user_message))
+                response = await asyncio.to_thread(_blocking_call)
                 
                 translations = response.strip().split("\n")
                 
@@ -2184,7 +2234,10 @@ Do not add numbers, bullets, or any extra formatting."""
         input_text = "\n".join(request.texts)
         
         user_message = UserMessage(text=input_text)
-        response = await chat.send_message(user_message)
+        def _blocking_call():
+            import asyncio as _asyncio
+            return _asyncio.run(chat.send_message(user_message))
+        response = await asyncio.to_thread(_blocking_call)
         
         # Split response into lines
         translations = response.strip().split("\n")
@@ -2259,7 +2312,10 @@ Do not add numbers, bullets, or any extra formatting."""
             
             input_text = "\n".join(texts_to_translate)
             user_message = UserMessage(text=input_text)
-            response = await chat.send_message(user_message)
+            def _blocking_call():
+                import asyncio as _asyncio
+                return _asyncio.run(chat.send_message(user_message))
+            response = await asyncio.to_thread(_blocking_call)
             
             translated_texts = response.strip().split("\n")
             

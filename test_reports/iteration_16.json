@@ -1,0 +1,70 @@
+{
+  "summary": "Backend-only regression testing after cold-start fixes. Created /app/backend/tests/test_coldstart_regression.py (29 tests): 28 PASS, 1 intentionally gated. Health endpoints (/health, /healthz, /ready, /api/health, /) all 200 on localhost:8001 with <5ms response; module import time measured at 1.17s so the cold-start fixes (docs disabled, lazy sendgrid import) work. Login/session_token, /auth/me, forgot-password, change-password (full roundtrip with restore), change-email validation, update-profile, translation cache GET (7 langs) and POST /generate cache-hit ({cached:true} in 2.3s), public menu + /client/{id} HTML all verified OK. FOUND ONE CRITICAL BUG: any menu-restaurant item create/update/delete (and any unauthenticated POST /api/public/translations/{id}/generate with changed content) makes the ENTIRE backend unresponsive for 10-14 minutes because emergentintegrations LlmChat.send_message internally calls SYNC litellm.completion(), blocking the single uvicorn event loop. During that window /health, /healthz, /ready and every API hang with no response - this is almost certainly the real root cause of the K8s liveness failures / pod restart loops, NOT just slow module import.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/menu-restaurant/items/create (and update/delete) -> trigger_translation_regeneration",
+        "issue": "Event loop starvation: regenerate_translations_background awaits LlmChat.send_message, which internally runs the BLOCKING litellm.completion() (see /root/.venv/.../emergentintegrations/llm/chat.py:123). With 7 languages x batches over 232 items, the single uvicorn worker's event loop is blocked continuously. Reproduced twice: after item create at 13:52:55, /health returned NOTHING (connection hang, curl 000) from 13:53 until the internal 14-min translation timeout; an earlier run 12:39->12:53 shows the same. Process CPU ~0%, NLWP=2 (no thread offload). In K8s this fails the liveness probe -> pod kill/restart loop. Fix: offload each LLM call, e.g. `await asyncio.to_thread(lambda: asyncio.run(chat.send_message(msg)))` or use litellm.acompletion / async httpx to the proxy; add a global concurrency guard + per-call timeout.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/public/translations/{restaurant_id}/generate",
+        "issue": "Same blocking issue but inside a request handler AND unauthenticated -> public DoS vector. When content_hash differs, the request runs the full 7-language sync LLM loop in the event loop; the whole backend (including /health) was dead for >10 min and the HTTP request never returned within 30s. Only the cache-hit path is safe (2.3s). Needs thread offload + auth/rate limiting + immediate 202 response with background execution off the loop.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/auth/forgot-password",
+        "issue": "Endpoint correctly returns 200 (verified for existing user, unknown email, and 422 for malformed email), but SendGrid rejects the key: backend log '[EMAIL] SendGrid error: HTTP Error 401: Unauthorized'. Reset emails are never delivered - SENDGRID_API_KEY is invalid/expired.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "DELETE /api/menu-restaurant/items/{item_id}",
+        "issue": "Soft-deletes with is_active=False only, while the translation content collector filters on status not in ['a_supprimer','deleted'] (ignores is_active). Deleted items therefore still feed the translation content hash, causing hash churn and needless (blocking) regenerations. Verified: item created then deleted still counted (233 vs 232 items) and broke the /generate cache hit."
+      },
+      {
+        "endpoint": "/health, /healthz, /ready",
+        "issue": "Not reachable via the preview public URL (ingress routes non-/api paths to the frontend -> 404). Verified 200 on http://localhost:8001. Only /api/health is publicly reachable. Expected for preview, but tests must use localhost for these paths."
+      },
+      {
+        "endpoint": "data hygiene",
+        "issue": "Leftover test data from a previous iteration in DB: menu item 'TEST_Château Margaux' (mri_b0fc0fdaefd3) in rest_f6975289d8af."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_coldstart_regression.py",
+    "/app/test_reports/pytest/coldstart_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Stop blocking the event loop on LLM calls - wrap every LlmChat.send_message used by translation (regenerate_translations_background, /api/public/translations/{id}/generate, /api/translate, /api/translate-and-store) in asyncio.to_thread (or use an async LLM call). This is the likely real cause of the K8s health-probe failures / restart loops.",
+    "CRITICAL: Make /api/public/translations/{id}/generate return immediately (202) and never run LLM work on the request path; add auth/rate-limit since it is public.",
+    "HIGH: Replace the invalid SENDGRID_API_KEY (401 Unauthorized) so password reset emails actually send.",
+    "MINOR: Make the translation content query consistent with soft-delete (filter is_active: True) so deleted items don't invalidate the translation cache."
+  ],
+  "critical_code_review_comments": [
+    "emergentintegrations LlmChat._execute_completion uses sync litellm.completion(); any 'async' usage blocks the loop. All call sites must offload to a thread.",
+    "Only 1 uvicorn worker: a single blocking call = full outage. Consider a dedicated worker/thread pool for translation jobs, plus asyncio.wait_for timeouts per batch instead of one 14-min global timeout.",
+    "/app/backend/server.py is 18,854 lines - must be split into routers (auth, menu, tasks, translations, public) for maintainability.",
+    "trigger_translation_regeneration correctly uses asyncio.get_running_loop() with a safe fallback; '[TRANSLATE] Scheduled background translation' was observed with no RuntimeError - that fix is verified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_coldstart_regression.py"
+  ],
+  "success_rate": {
+    "backend": "97% (28/29 executed tests pass; the 1 gated test reproduces a CRITICAL outage)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "Created and removed one TEST_Item_* menu item in rest_efb3705687ef (hard-deleted from mep_menu_restaurant_items to restore the original translation content hash). Password of groupenaga@gmail.com temporarily changed and restored to LeCercle123! (verified by login).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (restored and verified working after the change-password roundtrip test)",
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_coldstart_regression.py -v. The item-create/translation test is skipped unless RUN_BLOCKING_TRANSLATION_TEST=1 because it takes the whole backend down for 10-14 minutes (event-loop blocking). Health endpoints must be tested on http://localhost:8001 (public URL routes them to the frontend). Do NOT create/update/delete menu-restaurant items until the blocking-LLM fix lands: it changes the translation content hash, forces a full LLM regeneration and freezes the server; if that happens, `sudo supervisorctl restart backend` aborts it.",
+  "rca_of_the_issue": "Root cause of the production cold-start/restart loop: not module import time (measured 1.17s, fine) but event-loop blocking. emergentintegrations' LlmChat._execute_completion calls the synchronous litellm.completion() even though the wrapper is declared async. Menu mutations schedule regenerate_translations_background on the same (single) event loop, so 7 languages x N batches of sync HTTPS calls monopolise the loop; uvicorn cannot accept or answer any request, so the nginx sidecar's /health probe times out / is refused and K8s restarts the pod - which restarts the loop on the next menu edit or public /generate call. Reproduction: POST /api/menu-restaurant/items/create then poll http://localhost:8001/health -> curl exit 28 (no response) for the full translation duration."
+}

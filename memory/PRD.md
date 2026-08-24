@@ -40,6 +40,20 @@ GitHub repo (private): https://github.com/kajarupan10-boop/Neochef-tache
 
 ## Change log
 
+### 2026-08-24 — Event-loop starvation fix (deployment blocker)
+- **Root cause found by testing_agent (iteration_16)** : `LlmChat.send_message` uses litellm which does blocking HTTP internally → `await chat.send_message()` was FREEZING the FastAPI event loop during translation → `/health` timed out for 5s+ on every K8s liveness probe → pod restart loop.
+- **Primary fix (verified iteration_17)** :
+  - Wrapped every `await chat.send_message(...)` in `asyncio.to_thread(_blocking_call)` where `_blocking_call` runs `asyncio.run(chat.send_message(msg))` in a worker thread. Applied to 4 locations: `regenerate_translations_background`, `/api/public/translations/{id}/generate-legacy`, `/api/translate`, `/api/translate-and-store`.
+  - `POST /api/public/translations/{id}/generate` now returns **HTTP 202 immediately** (fire-and-forget via `trigger_translation_regeneration`) instead of blocking 60-90s.
+  - `asyncio.get_event_loop()` → `asyncio.get_running_loop()` with fallback (Python 3.12+ safe).
+  - `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` — disabled docs/openapi for production.
+- **Verified** : `/health` stayed at **1-2 ms** for 26+ consecutive probes over 15 min while a real 7-language LLM translation ran in background (previously hung 10-14 min).
+- **Additional cleanup** :
+  - Removed the 300s global timeout that prevented large menus (232 items × 7 langs) from ever persisting.
+  - Parallelized the 7 languages via `asyncio.gather` with `Semaphore(2)`.
+  - **Incremental persistence** per language: each language upserts as it finishes (`$set: {translations.{lang}: ...}`) so partial progress isn't lost.
+- **Regression tests** : 29/34 in `/app/backend/tests/test_coldstart_regression.py`.
+
 ### 2026-08-24 — Traduction Cache (γ) + Drawer dark navy (α)
 - **γ Traduction Cache — TERMINÉ** :
   - `trigger_translation_regeneration()` **réactivé** (server.py L213) : non-bloquant via `asyncio.create_task`, dédupliqué par restaurant_id (skip si task en cours), timeout global 5 min.
