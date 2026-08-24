@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only verification of the two reported bugs on https://chef-tasks.preview.emergentagent.com. (1) All 3 Expo sub-apps (/taches/, /menu/, /events/) now show 3 stacked buttons on the select screen: 'Connexion' (cyan), 'Créer un restaurant' (beige), 'Créer un groupe (Holding)' (beige) - verified present, clickable, and each opens the correct form ('Créer un restaurant' with restaurant/name/email/password fields, 'Créer un Groupe' with the holding description) and 'Retour' returns to the select screen. (2) Login with groupenaga@gmail.com / LeCercle123! returns POST /api/auth/login -> 200 on all 3 apps, no 'Invalid credentials' error; taches and menu land on a fully populated dashboard. All network calls go to https://chef-tasks.preview.emergentagent.com/api/... - zero requests to localhost:8001. Landing at / still renders the 3 app cards (regression OK). Two new issues found in the Events app after login (blank dashboard + 401 race).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "events app - post-login default screen", "issue": "After successful login (auth/login 200) the Events dashboard body is completely empty (only header '☰ Groupe Naga ⚙️'); no content, no empty-state text, no bottom tab bar. Persists after page reload. Navigation via the ☰ menu (Menu Groupe / Événement / Facturation / Prestataires) does render, so only the default landing screen is blank - it needs a default section selection or an empty state.", "selector": "text=Groupe Naga (events app root)", "priority": "HIGH"},
+      {"component": "all 3 apps - RN Web TouchableOpacity", "issue": "data-testid props are NOT forwarded to the DOM: page.locator('[data-testid=\"login-button\"|\"register-restaurant-button\"|\"register-holding-button\"]').count() === 0 although the strings exist in the bundle. Tests must rely on brittle French text selectors. Use RN's testID prop (which RN Web maps to data-testid) instead of a raw data-testid prop.", "selector": "[data-testid=*]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "events app login -> initial data load", "issue": "GET /api/prestataires/list and GET /api/events return 401 'Not authenticated' immediately after login (console errors), while the same endpoints return 200 when called with the session token via curl. Race condition: these two loaders fire before the token is stored/injected. Other calls in the same burst (categories/list, users/list, restaurants/my-restaurants, menu-restaurant/*) all return 200. After a reload the two calls are not retried at all, so the data never loads.", "affected_selectors": ["/api/prestataires/list", "/api/events"]},
+      {"flow": "taches app dashboard load", "issue": "GET /api/permanent-subtasks/list is called 9+ times in a single dashboard load (render/effect loop). All 200 but wasteful; likely a useEffect dependency issue in DailyTasksScreen ('Loading permanent subtasks locally...' logged ~12 times).", "affected_selectors": ["/api/permanent-subtasks/list"]},
+      {"flow": "cross-app session on web", "issue": "Because all 3 web builds share one origin, a session created in /menu/ auto-logs-in /events/ and /taches/ (shared localStorage). Not the iOS behaviour described in test_credentials.md; only relevant to the web preview but can confuse testing (first /events/ probe skipped the select screen for this reason).", "affected_selectors": ["localStorage session key"]}
+    ],
+    "design_issues": [
+      {"screen": "events app post-login", "issues": ["Large empty beige area with no content or guidance after login"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix the Events app blank default screen after login (select a default section, e.g. Menu Groupe, or render an empty state).",
+    "Fix the 401 race for /api/prestataires/list and /api/events in the Events app - await token hydration before firing these loaders and retry on 401.",
+    "De-duplicate the repeated /api/permanent-subtasks/list calls in the Taches dashboard (useEffect deps).",
+    "Switch from the raw data-testid prop to RN's testID prop on TouchableOpacity so testids reach the DOM in the web builds."
+  ],
+  "critical_code_review_comments": [
+    "Events app initial-load effects call authenticated endpoints without waiting for the stored session token, producing 401s with no retry path.",
+    "React Native Web does not forward arbitrary data-* props from TouchableOpacity; use testID to keep the app automatable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request); /api/auth/login curl-verified 200", "frontend": "85% - both reported bugs fixed on all 3 apps; Events post-login dashboard broken"},
+  "seed_data_creation": "none (used the pre-seeded admin groupenaga@gmail.com)",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! - valid, login returns 200 + session_token on the preview backend",
+  "context_for_next_testing_agent": "Both originally reported bugs are FIXED and verified on /taches/, /menu/, /events/: the 3 select-screen buttons exist/are clickable and login with the seeded admin works (200). Use text selectors (get_by_text('Connexion'|'Créer un restaurant'|'Créer un groupe (Holding)'|'Se connecter'|'Retour')) - data-testid is not in the DOM. Remaining open items: Events app blank post-login screen and the 401 race on /api/prestataires/list + /api/events; repeated /api/permanent-subtasks/list calls in Taches. Known/ignored: missing Ionicons TTF (tofu glyphs), full-width Connexion button on desktop. Note web sub-apps share localStorage sessions across /taches//menu//events/ - clear storage or use a fresh context before testing the select screen.",
+  "rca_of_the_issue": "Original bugs: the select screen only rendered the Connexion button and the admin account was absent from the preview MongoDB. Both fixed (3 buttons in the rebuilt bundles; admin seeded via /api/auth/register-admin). New Events 401s are a client-side ordering bug, not a backend auth bug - curl with the session token returns 200 for both /api/prestataires/list and /api/events."
+}

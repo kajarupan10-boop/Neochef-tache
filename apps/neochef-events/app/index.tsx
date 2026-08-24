@@ -2369,6 +2369,14 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, user: User, restaur
               <WebIcon name="log-in-outline" size={28} color="#1a1a2e" />
               <Text style={[styles.accessButtonText, { color: '#1a1a2e' }]}>Connexion</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.accessButton, { backgroundColor: '#EAE6CA', marginTop: 12 }]} onPress={() => { setMode('register'); }} data-testid="register-restaurant-button">
+              <WebIcon name="restaurant-outline" size={28} color="#1a1a2e" />
+              <Text style={[styles.accessButtonText, { color: '#1a1a2e' }]}>Créer un restaurant</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.accessButton, { backgroundColor: '#EAE6CA', marginTop: 12 }]} onPress={() => { setMode('register-holding'); }} data-testid="register-holding-button">
+              <WebIcon name="business-outline" size={28} color="#1a1a2e" />
+              <Text style={[styles.accessButtonText, { color: '#1a1a2e' }]}>Créer un groupe (Holding)</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </SafeAreaWrapper>

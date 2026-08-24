@@ -1,0 +1,50 @@
+{
+  "summary": "Frontend-only smoke test of the NeoChef preview after the build symlink fix (/app/frontend/build -> /app/backend/dist.old). PRIMARY FIX VERIFIED: preview loads at https://chef-tasks.preview.emergentagent.com with HTTP 200, page title 'NeoChef', home screen renders logo + the 3 CTAs (Connexion / Creer un restaurant / Creer un groupe (Holding)). All 3 CTAs are clickable and render their screens, 'Retour' returns to home, form inputs accept text. Static assets (index.html, /_fresh JS bundle 4.3MB, favicon.ico, manifest.json, sw.js, logo.png) all return 200 with correct content-types. Went one step beyond the smoke test: verified backend wiring by submitting the login form (POST /api/auth/login reaches backend, 401 for bad creds) and a full restaurant signup (POST /api/auth/register-admin 200 + 10 follow-up GETs all 200 -> dashboard renders). Preview is functional. Several non-blocking defects found (missing Ionicons font, empty database, redundant API calls, contrast issues on dashboard).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/permanent-subtasks/list", "issue": "Called 10+ times in a single dashboard load (duplicate/redundant fetches). Wasteful; likely missing memoization/effect dependency guard on the client."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Icon font (Ionicons)", "issue": "/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.b4eb097d35f44ed943676fd56f6bdc51.ttf does NOT exist in the served build. `serve -s` SPA-fallback returns index.html (HTTP 200, content-type text/html, 32KB) for it, so the browser logs 'Failed to decode downloaded font' + 'OTS parsing error: invalid sfntVersion: 1008813135' and every vector icon renders as a blank/tofu glyph. Fix: copy the vector-icons font assets into the served build dir (or rebuild the Expo web export so /assets/node_modules/... exists).", "selector": "n/a (network asset)", "priority": "MEDIUM"},
+      {"component": "Login error banner", "issue": "For a 422 validation response the banner renders literally '[object Object]' instead of a readable message (FastAPI returns detail as an array of objects; the client only handles string detail). Reproduce: login with an email whose TLD is rejected by EmailStr, e.g. foo@example.test.", "selector": "text=[object Object]", "priority": "MEDIUM"},
+      {"component": "Global JS error handler", "issue": "Uncaught 'A network error occurred.' pageerror on every screen load (unhandled rejection originating from the aborted Ionicons font fetch). Harmless today but it pollutes error reporting and would mask real errors.", "selector": "n/a", "priority": "LOW"},
+      {"component": "Deep links / SPA routes", "issue": "Direct navigation to /login, /create-restaurant, /create-holding or any unknown path returns index.html (200) but the Expo router renders 'Unmatched Route - Page could not be found.' The app only navigates via internal state from '/', so bookmarks/refreshes on any sub-path show the not-found screen.", "selector": "text=Unmatched Route", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Login with documented test credentials", "issue": "Both accounts in /app/memory/test_credentials.md (groupenaga@gmail.com / LeCercle123! and tharshikan@orange.fr / Kajan1012) return 401 'Invalid credentials'. Root cause: the local MongoDB database 'test_database' was completely EMPTY (mep_users had 0 documents) - no seed/superadmin user exists in the preview env. Verified identical 401 by calling the backend directly, so this is a data/seed gap, not a frontend bug. Any tester or user trying to log in to the preview cannot get past the login screen; only fresh registration works.", "affected_selectors": ["text=Se connecter", "text=Invalid credentials"]},
+      {"flow": "Restaurant signup -> dashboard", "issue": "No issue - works. POST /api/auth/register-admin 200, then categories/list, permanent-subtasks/list, daily-tasks/list, subtasks/list, task-templates/list, restaurants/my-restaurants, users/list, completions endpoints all 200; dashboard renders with restaurant name and bottom nav.", "affected_selectors": []}
+    ],
+    "design_issues": [
+      {"screen": "Dashboard (post-login)", "issues": ["Main content area renders on a beige/cream background (#e8e4c9-like) while the header and bottom nav are dark navy (#1a1a2e) - jarring clash with the declared dark PWA theme.", "Empty-state text 'Aucune tache pour cette date' and its subtitle are light grey on that beige background -> very low contrast, barely legible.", "Bottom navigation uses emoji-only icons with no text labels; combined with the broken Ionicons font the nav is not self-explanatory."]},
+      {"screen": "Home", "issues": ["No visible 'NeoChef' wordmark/heading - only the logo image (the string 'NeoChef' appears in <title> and inside the logo bitmap only).", "Primary CTA on home is cyan while the primary CTAs on login/create screens are cream/beige - inconsistent primary-button colour across screens."]},
+      {"screen": "All screens", "issues": ["https://unpkg.com/ionicons@7.1.0/dist/css/ionicons.min.css injected from index.html is blocked (net::ERR_BLOCKED_BY_ORB). Remove the dead CDN <link>/<script> tags or self-host."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Add the Ionicons/vector-icons font files to the served build so /assets/node_modules/.../Ionicons.*.ttf returns a real ttf instead of the SPA-fallback HTML (icons are currently broken app-wide).",
+    "Seed the preview database: mongodb 'test_database' is empty, so the credentials in /app/memory/test_credentials.md fail with 401. Either run an idempotent seed for the superadmin/admin/staff accounts or update test_credentials.md.",
+    "Handle FastAPI 422 'detail' arrays in the client error formatter - currently shows '[object Object]'.",
+    "De-duplicate the dashboard load: /api/permanent-subtasks/list is requested 10+ times per render.",
+    "Fix dashboard theming/contrast (beige content area + light grey empty-state text on dark-theme app).",
+    "PROCESS RISK: /app/frontend/package.json has no build step ('start': 'serve -s build -l 3000') and build is a symlink to the pre-built /app/backend/dist.old (dated May 10). Nothing under /app/frontend/src is compiled, so future source changes will NOT appear in the preview. Add a real Expo web export step (or document the export command) before shipping further UI work.",
+    "Remove the dead unpkg ionicons CDN <link>/<script> from index.html (blocked by ORB)."
+  ],
+  "critical_code_review_comments": [
+    "frontend/package.json has no build script - the preview only works because build is symlinked to a stale prebuilt export (/app/backend/dist.old, 10 May). This is not reproducible on a fresh container/deploy; the build must be generated, not symlinked.",
+    "Serving with `serve -s` means every missing static asset (fonts, images, chunks) silently returns index.html with HTTP 200, which hides real 404s - exactly what happened with the Ionicons font. Consider excluding /assets and /_fresh from SPA rewrite.",
+    "The served bundle exposes only 4 data-testid / 28 testID attributes for the entire app; interactive elements have no stable test hooks, forcing text-based selectors in automation.",
+    "/app/backend/server.py is ~755KB in a single file - must be split into routers/services per the module layout that already exists (/app/backend/routes, /app/backend/models)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request); all 11 API endpoints hit incidentally during the signup flow returned 200", "frontend": "100% of the requested smoke-test items passed (load, title, 3 CTAs, static assets); 4 additional non-blocking defects found"},
+  "seed_data_creation": "Created and then deleted a throwaway account/restaurant (qa.smoke.neochef@gmail.com / TEST_QA_Resto) to verify the signup->dashboard flow. Cleaned up from mep_users and mep_restaurants; DB is back to 0 users / 0 restaurants (its original state).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "/app/memory/test_credentials.md lists groupenaga@gmail.com / LeCercle123! (Admin) and tharshikan@orange.fr / Kajan1012 (Staff) - BOTH RETURN 401. The local DB 'test_database' has zero users. backend/.env also defines SUPERADMIN_EMAIL=neochef.fr@gmail.com / SUPERADMIN_PASSWORD=Kajan1012 which is not provisioned either.",
+  "context_for_next_testing_agent": "Preview loads correctly; the build symlink fix works. The frontend is a STATIC Expo web export served by `serve -s build` (build -> /app/backend/dist.old, entry bundle at /_fresh/static/js/web/entry-1773093333-force.js). No hot reload - /app/frontend/src is NOT what is served. Navigation is internal state-based, URL always stays '/', so use text selectors (data-testid is mostly absent) and never deep-link to /login etc. To test any authenticated flow you must first register through 'Creer un restaurant' (POST /api/auth/register-admin) because the DB has no seeded users; remember to clean up mep_users/mep_restaurants in DB 'test_database' afterwards. Note that missing static assets return index.html with 200 due to SPA fallback - always check content-type when validating assets.",
+  "rca_of_the_issue": "Original 'Preview ne fonctionne pas': /app/frontend/build did not exist while package.json only runs `serve -s build -l 3000`, so `serve` had no document root and every request 404'd. Symlinking build -> /app/backend/dist.old (a valid prebuilt Expo export whose index.html references /_fresh/static/js/web/entry-1773093333-force.js, present in that directory) restores the preview - confirmed by 200s on index.html and the entry bundle plus a fully rendering home screen. Residual: the same export is missing the vector-icons font directory, and because of SPA fallback the missing font is answered with index.html, producing the OTS/sfntVersion decode errors and the 'A network error occurred.' unhandled rejection."
+}

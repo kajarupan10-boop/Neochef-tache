@@ -82,7 +82,8 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/events"
     },
     "extra": {
       "eas": {},

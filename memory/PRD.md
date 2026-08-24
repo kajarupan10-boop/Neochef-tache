@@ -1,144 +1,105 @@
-# NeoChef - Product Requirements Document
+# NeoChef — Product Requirements Document
 
-## ⭐ Mise à jour 5 février 2026 — Découpe en 3 apps iOS
+## Original problem statement
+NeoChef is a restaurant management PWA (Expo web + FastAPI backend + MongoDB) originally organised as **one monolithic Expo app** whose `index.tsx` file contained every feature. The user is splitting it into **three focused mobile apps** and needs the shared codebase tree-shaken so each app ships only the screens/logic it uses. In parallel, the user deploys the backend to **Render** and consumes it from the three Expo apps + a web PWA preview.
 
-L'application monolithique a été divisée en **3 applications iOS indépendantes** car le monolithe était trop lourd pour la compilation/publication App Store :
+### The three apps
+| App | Features it must keep |
+|---|---|
+| `neochef-taches` | Tâches + Préparation de commande |
+| `neochef-menu` | Menu + Menu en cours + Menu Client + Fiche Technique + Ardoise |
+| `neochef-events` | Menu Groupe + Événement + Facturation + Prestataire |
 
-- **App 1 — NeoChef Tâches** (`com.neochef.taches`) : Tâches du jour, préparation, modèles, catégories, tâches permanentes, préparation de commande, historique. Bundle JS : 3.9 MB.
-- **App 2 — NeoChef Menu** (`com.neochef.menu`) ⭐ priorité user : Menu Restaurant (publié + brouillon), Menu Client public, Fiche Technique, Rapport Ardoise. Bundle JS : 4.5 MB.
-- **App 3 — NeoChef Events** (`com.neochef.events`) : Menu Groupe, création de groupes, événements, facturation, prestataires. Bundle JS : 4.0 MB.
-
-**Authentification** : 3 écrans de login indépendants, **DB MongoDB utilisateurs partagée** (mêmes credentials, sessions iOS séparées via AsyncStorage par bundle).
-
-**Backend FastAPI partagé** : `/app/backend/server.py` non modifié, sert les 3 apps simultanément.
-
-**Stratégie technique** : copie du monolithe, stub des écrans non pertinents (`function X() { return null }`) + filtrage du menu de navigation. Scripts dans `/app/scripts/build_three_apps.py` et `customize_navigation_v2.py`.
-
-Build Web testé OK pour les 3 apps. Reste à exécuter `eas build --platform ios` pour chaque app après création des `ascAppId` dans App Store Connect.
+### Language
+User communicates in **French**. Agent must always respond in French.
 
 ---
 
-
-# NeoChef - Product Requirements Document
-
-## Résumé du Produit
-NeoChef est une PWA de gestion de restaurant complète comprenant:
-- Gestion des menus (carte, ardoise)
-- Gestion des événements avec prestataires
-- Système de permissions pour le staff
-- Traductions automatiques des menus (multi-langues)
-- Génération de PDF (menus, propositions événements, factures, commandes)
-- Rapport mensuel des commandes fournisseurs (par produit ou par date)
-
-## Architecture Technique (refonte 5 février 2026)
-- **Frontend** : 3 applications Expo iOS indépendantes dans `/app/apps/`
-  - `neochef-taches/` (com.neochef.taches) — Tâches + Préparation de commande
-  - `neochef-menu/` (com.neochef.menu) — Menus + Fiche Technique + Rapport Ardoise
-  - `neochef-events/` (com.neochef.events) — Events + Facturation + Prestataires
-- **Backend**: FastAPI - `/app/backend/server.py` (partagé)
-- **Database**: MongoDB (partagée, mêmes comptes utilisateurs pour les 3 apps)
-- **Monolithe historique** : `/app/temp_clone/frontend/` conservé en lecture seule
-
-Voir `/app/apps/README.md` pour le détail de la structure et des bundle IDs iOS.
-
-## Session du 21 Mars 2026 (suite)
-
-### Nouvelles Fonctionnalités
-
-#### 1. Filtre "Mode" pour le Rapport Mensuel ✅
-- **Ajout d'un 4ème filtre** "Mode" avec deux options :
-  - **Par Produit** : Affiche le total par produit (Coca: X unités, Evian: Y unités)
-  - **Par Date** : Affiche les commandes jour par jour (18 février: quoi, 24 février: quoi)
-- Le titre du modal change dynamiquement selon le mode sélectionné
-- Le PDF est aussi généré selon le mode choisi
-
-#### 2. Correction du Téléchargement PDF (iOS) ✅
-- **Problème** : Sur iOS Safari, le PDF s'ouvrait en page blanche
-- **Solution** : Remplacement de `window.open()` par un téléchargement direct via `fetch()` + `blob`
-- Le PDF se télécharge maintenant correctement sur tous les appareils
-
-### Bugs Corrigés (session précédente)
-
-#### 1. Rapport Mensuel Bloqué ✅
-- **Cause**: Les routes backend étaient correctement ordonnées
-- **Vérification**: L'API `/api/supplier-orders/monthly-report` fonctionne correctement
-- **Résultat**: Le rapport s'affiche avec filtres (fournisseur, dates, type, mode), résumé et bouton PDF
-
-#### 2. Modal PDF Facturation Ajouté ✅
-- **Modification**: Ajout d'un modal PDF unifié pour Devis et Factures
-- **Caractéristiques**: Boutons "Retour" et "Télécharger", prévisualisation iframe
-- **Fichiers**: `/app/temp_clone/frontend/app/index.tsx`
-
-### Session du 19 Mars 2026 (précédente)
-
-#### Bugs Corrigés Précédemment
-1. Menu Client Bloqué ✅
-2. Détails Prestataire Non Affichés ✅
-3. Logo PDF Déformé ✅
-4. Prix des Plats dans PDF Événement ✅
-5. Traduction des Tailles (Petit/Grand) ✅
-
-## Point Technique Important
-Le frontend Expo est dans `/app/temp_clone/frontend` mais le serveur sert `/app/frontend/build`. Après chaque modification frontend:
-```bash
-cd /app/temp_clone/frontend && npx expo export --platform web
-cp -r dist/* /app/frontend/build/
-sudo supervisorctl restart frontend
+## Architecture
+```
+/app/
+├── backend/                     # FastAPI + MongoDB (18 683-line monolithic server.py)
+│   ├── server.py                # ⚠️ Serves both API (/api/*) and Expo web dist
+│   ├── dist.old/                # Pre-built Expo web export (dated 10 May 2026)
+│   └── uploads/                 # (created at runtime, now RELATIVE to ROOT_DIR)
+├── frontend/                    # Web PWA — package.json has ONLY `serve -s build`
+│   ├── src/                     # ⚠️ NOT built by anything — orphan source
+│   └── build/  → symlink → /app/backend/dist.old   # <- preview fix (2026-05-11)
+├── apps/
+│   ├── neochef-taches/  app/index.tsx   (~9 600 lines after cleanup)
+│   ├── neochef-menu/    app/index.tsx   (~14 200 lines after cleanup)
+│   └── neochef-events/  app/index.tsx   (~11 800 lines after cleanup)
+└── neochef-github-export/       # Mirror pushed to GitHub → deployed on Render
+    └── backend/server.py        # Kept in sync with /app/backend/server.py
 ```
 
-## État des PDF - Tous Fonctionnels
+Deploy target: **Render.com** (service name `NeoChef-Tache`, live at https://neochef-tache.onrender.com).
+GitHub repo (private): https://github.com/kajarupan10-boop/Neochef-tache
 
-| Type de PDF | Modal | Bouton Retour | Bouton Télécharger | Status |
-|-------------|-------|---------------|-------------------|--------|
-| Commandes Fournisseurs | ✅ | ✅ (Fermer) | ✅ | OK |
-| Propositions Événements | ✅ | ✅ | ✅ | OK |
-| Devis/Factures | ✅ | ✅ | ✅ | OK |
-| Rapport Mensuel | N/A (direct) | N/A | ✅ | OK |
+---
 
-## Problèmes Restants (Backlog)
+## Change log
 
-### P0 - Critique
-- **Sauvegarde Permissions UI**: Le formulaire de gestion des permissions staff pourrait ne pas sauvegarder correctement (à vérifier avec l'utilisateur)
+### 2026-08-24 — Preview resilience fix
+- **Bug**: `Je n'arrive pas ouvrir` — https://chef-tasks.preview.emergentagent.com returned HTTP 404 on all frontend routes.
+- **Root cause**: `/app/frontend/build/` is an ephemeral artifact directory (not in git). A container restart wiped it. `serve` was up but had nothing to serve.
+- **Fix**: added `/app/scripts/ensure-build-and-serve.sh` — a wrapper that (1) fast-assembles `build/` from the persisted `/app/apps/neochef-*/dist/` folders if missing, (2) falls back to full `bash /app/scripts/build-all-apps.sh` if any `dist/` is also missing, (3) execs `yarn --cwd /app/frontend start`. Updated `/etc/supervisor/conf.d/supervisord.conf` so `[program:frontend].command = bash /app/scripts/ensure-build-and-serve.sh`.
+- **Validated** by testing_agent (iteration_9.json): `rm -rf build/ && supervisorctl restart frontend` self-heals in ~5s, all 4 routes return 200.
 
-### P1 - Priorité Haute
-- **Aperçu PDF blanc iOS**: L'aperçu PDF dans la PWA iOS peut ne pas fonctionner
-- **Barre Navigation iOS**: Problème de mise en page persistant sur iOS
-- **Photos Espaces Privatisation**: Ne s'affichent pas côté client
+### 2026-08-24 — Register buttons + admin seed
+- **Bugs**: (1) `pas de bouton pour créer un compte` — the tree-shaked select screen showed only a single 'Connexion' button; (2) `Je n'arrive pas connecter avec mes identifiants` — admin credentials in `test_credentials.md` returned 401 because the preview MongoDB was empty.
+- **Fix**: (A) added 2 new TouchableOpacity buttons to `mode === 'select'` in all 3 apps' `app/index.tsx` — 'Créer un restaurant' (data-testid=register-restaurant-button) → `setMode('register')`, and 'Créer un groupe (Holding)' (data-testid=register-holding-button) → `setMode('register-holding')`. The register/register-holding forms + backend endpoints already existed. (B) POST /api/auth/register-admin to seed `groupenaga@gmail.com / LeCercle123!` (admin, restaurant 'Groupe Naga'). Rebuilt & re-assembled.
+- **Validated** by testing_agent (iteration_8.json): 3 buttons present on all 3 apps, register forms open correctly, login returns 200 + session_token.
 
-### P2 - Priorité Moyenne
-- **Édition Ardoise**: Ne charge pas les plats du menu pour sélection
-- **Performance multi-utilisateurs**: À investiguer
+### 2026-08-24 — Multi-app landing
+- **Change**: from single-app preview (symlink to `dist.old`) to a proper 3-app landing.
+- **Steps**: added `build:web: expo export -p web` + `experiments.baseUrl` to each of the 3 Expo apps → parallel builds → assembled into `/app/frontend/build/{taches,menu,events}` + hand-written landing `index.html` + `serve.json` rewrites → post-process each `index.html` (strip SW registration, fix manifest/apple-touch baseUrl).
+- **Validated** by testing_agent (iteration_7.json) — 3 distinct bundles, deep SPA routes work, no cross-app SW contamination.
 
-### P3 - Refactoring
-- Décomposer `server.py` (~18k lignes) en modules
-- Décomposer `index.tsx` (~26k lignes) en composants
+### 2026-05-11 — Preview fix (initial)
+- **Bug**: `Preview ne fonctionne pas` — HTTP 404 on `/`.
+- **Root cause**: `/app/frontend/package.json` runs `serve -s build -l 3000` but `/app/frontend/build/` did not exist.
+- **Fix (superseded by 2026-08-24 changes)**: symlinked `/app/frontend/build` → `/app/backend/dist.old`. Later replaced by proper build pipeline.
 
-## Endpoints Clés
+### 2026-05-11 — Render deployment fix
+- **Bug**: Render deploy for `NeoChef-Tache` exited with status 1, no Python traceback in logs.
+- **Root cause**: `server.py` crashed silently at import time trying to `os.makedirs('/app/backend/uploads/…')` (PermissionError on Render).
+- **Fix**: relative paths + `try/except` + `print(..., flush=True)`. Applied to both `/app/backend/server.py` and `/app/neochef-github-export/backend/server.py`. Live at https://neochef-tache.onrender.com.
 
-### API Publique (Menu Client)
-- `GET /api/menu-restaurant/public/{restaurant_id}` - Menu public
-- `GET /api/public/translations/{restaurant_id}` - Traductions
+### Earlier this job — Codebase tree-shaking
+- Removed ~3 700 lines of unused features from each of the three Expo apps' `index.tsx`.
 
-### API Événements
-- `GET /api/events` - Liste des événements
-- `GET /api/events/{id}/providers` - Prestataires d'un événement
-- `GET /api/events/{id}/menu/export-pdf` - Générer PDF menu événement
+---
 
-### API Commandes Fournisseurs
-- `GET /api/supplier-orders/monthly-report` - Rapport mensuel (JSON)
-- `GET /api/supplier-orders/monthly-report/pdf` - Rapport mensuel (PDF)
-- `GET /api/supplier-orders/{order_id}/pdf` - PDF commande individuelle
+## Open backlog (priority order)
 
-### API Facturation
-- `GET /api/invoices/list` - Liste des devis/factures
-- `GET /api/invoices/{invoice_id}/pdf` - PDF devis/facture
+### P0 — Preview reproducibility
+- **Add a real build step** to `/app/frontend/package.json` (e.g. `expo export -p web` or Vite build). Today the preview only works because `build` is a symlink to a static export from 10 May. Any change under `/app/frontend/src` is invisible.
 
-## Credentials de Test
-- **Admin**: `groupenaga@gmail.com` / `LeCercle123!`
-- **Staff**: `tharshikan@orange.fr` / `Kajan1012`
+### P1 — UX defects (from testing_agent iteration_6)
+- Missing **Ionicons TTF** in the served build → icons render as tofu app-wide. Copy `@expo/vector-icons` fonts into `dist.old/assets/…` or regenerate the export.
+- Login error banner shows `[object Object]` on FastAPI 422 responses (client only handles string `detail`).
+- Dashboard has beige content area on a navy-themed app + light-grey empty-state text on beige → very low contrast.
+- Remove dead `unpkg.com/ionicons@7.1.0/…` `<link>`/`<script>` from `index.html` (blocked by ORB).
+- De-duplicate the dashboard load: `/api/permanent-subtasks/list` fires 10+ times per render.
 
-## Intégrations
-- **MongoDB**: Base de données
-- **Emergent LLM**: Traductions automatiques (via Emergent LLM Key)
-- **XLSX**: Import/export Excel
-- **ReportLab/FPDF**: Génération de PDF
+### P1 — Data seeding
+- Local `test_database` MongoDB is empty. Credentials in `/app/memory/test_credentials.md` return 401 because those users don't exist locally. Add an idempotent seed script or document the actual working accounts.
+
+### P2 — Verify frontend tree-shaking (blocked)
+- Install `node_modules` in each `/app/apps/neochef-*` and run the app on a device/simulator to confirm the aggressive deletion didn't break any surviving screen. Currently only `tsc` was run.
+- Verify `screensWithoutBottomNav` array and `Drawer.Screen` list in each cleaned `index.tsx`.
+
+### P2 — Render / production hardening
+- `FRONTEND_URL` is not set on Render → password-reset emails will contain broken links.
+- Free-tier instance sleeps after 15 min → 50-second cold-start; upgrade plan or add a pinger.
+- Add a `/api/health/db` endpoint that actually `ping`s Mongo, and configure Render to use it as the health check.
+
+### P3 — Refactoring (long-term)
+- `/app/backend/server.py` is 18 683 lines — split into `routes/`, `services/`, `models/` (folders already exist but nearly empty).
+- Each `apps/neochef-*/app/index.tsx` is still 10 k+ lines — extract shared components.
+
+---
+
+## Test credentials
+See `/app/memory/test_credentials.md`. **Note**: those accounts currently return 401 against the local preview because the DB is empty; only fresh registration via `/api/auth/register-admin` works in the local preview env.

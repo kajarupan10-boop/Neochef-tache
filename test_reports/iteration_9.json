@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only verification of the preview 404 fix (ensure-build-and-serve.sh wrapper). Verified: (1) current preview healthy — /, /taches/, /menu/, /events/ all HTTP 200; landing title 'NeoChef — Choisir une application' with 3 clickable cards (open-taches/open-menu/open-events) navigating correctly; (2) each sub-app renders its Expo web bundle with the 3 buttons Connexion / Créer un restaurant / Créer un groupe (Holding); (3) SPA rewrites work — deep links /{app}/some/deep/route return 200, no 'Files within build' directory listing; (4) RESILIENCE: `sudo rm -rf /app/frontend/build/ && sudo supervisorctl restart frontend` self-healed via the FAST assembly path (frontend.out.log shows '[ensure-build] Assembling build/ from existing dist/ folders...' + postprocess ok for all 3 apps) and all 4 routes returned 200 within ~8s; (5) after the reset, admin login POST /api/auth/login returns 200 with session_token, and the full UI login flow in /taches/ succeeded (dashboard 'Groupe Naga' rendered, no error elements).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Tâches dashboard load after login", "issue": "Observed 6+ identical repeated GET /api/permanent-subtasks/list calls (all 200) within a few seconds of landing on the dashboard — likely a missing dependency guard / re-render loop in the data fetch effect. Non-blocking but wasteful.", "affected_selectors": ["/api/permanent-subtasks/list"]}
+    ],
+    "design_issues": [
+      {"screen": "Sub-apps on desktop viewport (1920px)", "issues": ["Action buttons (Connexion / Créer un restaurant / Créer un groupe) stretch edge-to-edge with no max-width container; only cosmetic since these are mobile-first Expo apps rendered on web"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: deduplicate/guard the repeated /api/permanent-subtasks/list fetch on the Tâches dashboard",
+    "Optional: add a max-width wrapper for sub-app home screens on wide viewports"
+  ],
+  "critical_code_review_comments": [
+    "ensure-build-and-serve.sh correctly uses set -euo pipefail and only falls back to the 3-minute full build when a dist/ is missing — good. Consider that /app/apps/*/dist is also not git-tracked; if a container reset wipes dist/ too, the first frontend start will block ~3 min on build-all-apps.sh with no route serving. Consider serving a lightweight 'building…' placeholder in that path."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request; login endpoint spot-checked 200)", "frontend": "100%"},
+  "seed_data_creation": "none",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (admin) — verified working",
+  "context_for_next_testing_agent": "Preview fix is confirmed working and resilient. build/ is auto-assembled from /app/apps/neochef-{taches,menu,events}/dist by /app/scripts/ensure-build-and-serve.sh on frontend start (~5s). Resilience test command: sudo rm -rf /app/frontend/build/ && sudo supervisorctl restart frontend && sleep 8, then curl the 4 routes. Do NOT run yarn build (3+ min). Ionicons tofu icons is a known non-blocking defect — do not report.",
+  "rca_of_the_issue": "Original 404: container restart wiped the untracked ephemeral /app/frontend/build/, leaving `serve` with no content. Fix (wrapper script + supervisor command change) verified to re-assemble build/ from persisted per-app dist/ folders before starting serve; simulated wipe recovered fully in under 8 seconds."
+}

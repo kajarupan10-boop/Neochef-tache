@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "serve -s build -l 3000"
+    "start": "serve build -l 3000",
+    "build": "bash ../scripts/build-all-apps.sh"
   },
   "dependencies": {
     "serve": "^14.2.0"
