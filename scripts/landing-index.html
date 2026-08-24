@@ -19,10 +19,11 @@
             color: #e8f1ff;
             min-height: 100vh;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
-            padding: 24px;
+            padding: 24px 20px 40px;
         }
+        body.centered { align-items: center; padding: 24px; }
         .stage { width: 100%; max-width: 440px; }
         /* ===== HEADER LOGO ===== */
         .brand { text-align: center; margin-bottom: 32px; }
@@ -120,7 +121,12 @@
         /* ===== SETTINGS VIEW ===== */
         #settings-view .settings-header {
             display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
-            padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 14px 4px; border-bottom: 1px solid rgba(255,255,255,0.06);
+            position: sticky; top: 0; z-index: 10;
+            background: rgba(11,18,32,0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            margin-left: -4px; margin-right: -4px;
         }
         #settings-view .back-icon {
             width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
@@ -403,6 +409,10 @@
         registerHoldView.style.display = 'none';
         moduleView.style.display = 'none';
         settingsView.style.display = 'none';
+        document.querySelector('.brand').style.display = 'block';
+    }
+    function setBodyCentered(centered) {
+        document.body.classList.toggle('centered', !!centered);
     }
     function computeWelcomeSubtitle(user, restaurant) {
         // Règle : l'utilisateur voit ce qui correspond à SON périmètre.
@@ -419,22 +429,24 @@
     function showModule(user, restaurant) {
         hideAll();
         moduleView.style.display = 'block';
+        setBodyCentered(true);
         welcomeName.textContent = user?.name || user?.email || 'Utilisateur';
         welcomeRest.textContent = computeWelcomeSubtitle(user, restaurant);
     }
     function showLogin() {
         hideAll();
         loginView.style.display = 'block';
+        setBodyCentered(true);
         loginError.classList.remove('show');
     }
     function showError(msg) {
         loginError.textContent = msg;
         loginError.classList.add('show');
     }
-    function showRegisterRestaurant() { hideAll(); registerRestView.style.display = 'block'; }
-    function showRegisterHolding() { hideAll(); registerHoldView.style.display = 'block'; }
-    function showForgot() { hideAll(); forgotView.style.display = 'block'; document.getElementById('forgot-msg').classList.remove('show'); }
-    function showReset() { hideAll(); resetView.style.display = 'block'; document.getElementById('reset-error').classList.remove('show'); }
+    function showRegisterRestaurant() { hideAll(); registerRestView.style.display = 'block'; setBodyCentered(true); }
+    function showRegisterHolding() { hideAll(); registerHoldView.style.display = 'block'; setBodyCentered(true); }
+    function showForgot() { hideAll(); forgotView.style.display = 'block'; setBodyCentered(true); document.getElementById('forgot-msg').classList.remove('show'); }
+    function showReset() { hideAll(); resetView.style.display = 'block'; setBodyCentered(true); document.getElementById('reset-error').classList.remove('show'); }
     function persistSession(data) {
         localStorage.setItem(TOKEN_KEY, data.session_token);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
@@ -597,6 +609,9 @@
     function showSettings() {
         hideAll();
         settingsView.style.display = 'block';
+        setBodyCentered(false);
+        document.querySelector('.brand').style.display = 'none';
+        window.scrollTo(0, 0);
         const u = currentUser();
         const r = currentRestaurant();
         if (!u) { showLogin(); return; }
