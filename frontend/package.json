@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "serve build -l 3000",
-    "build": "bash ../scripts/build-all-apps.sh"
+    "build": "test -d build && echo 'using prebuilt frontend/build' || (echo 'ERROR: frontend/build missing' && exit 1)"
   },
   "dependencies": {
     "serve": "^14.2.0"

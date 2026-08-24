@@ -9,7 +9,7 @@
 /coverage
 
 # production
-/build
+# /build  <- NOT ignored: we ship the prebuilt Expo assemblage as deploy artifact
 
 # misc
 .DS_Store
