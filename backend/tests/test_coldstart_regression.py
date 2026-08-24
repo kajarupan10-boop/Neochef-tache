@@ -366,6 +366,78 @@ class TestEventLoopStarvationRegression:
         assert r.json()["status"] == "ok"
 
 
+# ---------- Light event-loop starvation regression (iteration 18) ----------
+class TestEventLoopStarvationLight:
+    """Same assertion as TestEventLoopStarvationRegression but forces the real
+    background translation on a SMALL restaurant (2 items) so the test finishes
+    in ~40s and does not burn a 232-item x 7-language LLM run."""
+
+    SMALL_RESTAURANT = "rest_3b7aad7c27be"
+
+    @pytest.fixture(scope="class")
+    def small_coll(self):
+        from pymongo import MongoClient
+        from dotenv import dotenv_values as _dv
+        env = _dv("/app/backend/.env")
+        cli = MongoClient(env["MONGO_URL"].strip('"'), serverSelectionTimeoutMS=5000)
+        coll = cli[env["DB_NAME"].strip('"')]["mep_translations"]
+        doc = coll.find_one({"restaurant_id": self.SMALL_RESTAURANT})
+        yield coll, doc
+        if doc:
+            doc.pop("_id", None)
+            coll.replace_one({"restaurant_id": self.SMALL_RESTAURANT}, doc, upsert=True)
+        cli.close()
+
+    def test_health_latency_during_small_background_translation(self, client, small_coll):
+        coll, doc = small_coll
+        coll.update_one({"restaurant_id": self.SMALL_RESTAURANT},
+                        {"$set": {"content_hash": "FORCE_REGEN_ITER18"}}, upsert=True)
+
+        t0 = time.time()
+        r = client.post(f"{BASE_URL}/api/public/translations/{self.SMALL_RESTAURANT}/generate",
+                        timeout=30)
+        trigger = time.time() - t0
+        assert r.status_code == 202, f"{r.status_code}: {r.text[:300]}"
+        assert trigger < 2.0, f"trigger blocked {trigger:.2f}s (LLM on request path)"
+
+        latencies = []
+        for _ in range(20):
+            s = time.time()
+            try:
+                h = client.get(f"{LOCAL_URL}/health", timeout=5)
+                latencies.append((h.status_code, round((time.time() - s) * 1000, 1)))
+            except Exception as e:
+                latencies.append((f"EXC:{type(e).__name__}", round((time.time() - s) * 1000, 1)))
+            time.sleep(1.5)
+
+        print(f"trigger={trigger*1000:.0f}ms latencies(ms)={latencies}")
+        hung = [x for x in latencies if x[0] != 200]
+        assert not hung, f"health probe failed during background translation: {latencies}"
+        starved = [x for x in latencies if x[1] > 2000]
+        assert not starved, f"event loop starved (>2s): {starved} (all={latencies})"
+        # KNOWN MINOR BUG (iteration 18): one ~0.8-1.0s spike is reproducible a few
+        # seconds into the first translation of a process, because
+        # `from emergentintegrations.llm.chat import LlmChat` (server.py:120) runs
+        # ON the event loop and pulls litellm (~1s) synchronously.
+        spikes = [x for x in latencies if x[1] > 500]
+        assert not spikes, (
+            f"health probe(s) >500ms during background translation: {spikes} "
+            "- litellm import at server.py:120 runs on the event loop; move it into "
+            f"asyncio.to_thread or warm it up at startup (all={latencies})")
+
+    def test_background_translation_persisted(self, client, small_coll):
+        coll, _ = small_coll
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            doc = coll.find_one({"restaurant_id": self.SMALL_RESTAURANT}, {"_id": 0})
+            if doc and doc.get("content_hash") not in (None, "FORCE_REGEN_ITER18") \
+                    and len(doc.get("translations", {})) >= 7:
+                assert sorted(doc["translations"].keys()) == sorted(EXPECTED_LANGS)
+                return
+            time.sleep(3)
+        pytest.fail("background translation never persisted 7 languages within 90s")
+
+
 # ---------- Translation cache data-format / completion bugs (found iteration 17) ----------
 class TestTranslationCacheDataIntegrity:
     def test_legacy_format_docs_are_served(self, client):

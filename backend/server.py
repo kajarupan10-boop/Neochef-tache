@@ -14,14 +14,64 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
 import base64
-# sendgrid is lazy-imported inside send_password_reset_email() to avoid loading it at cold start
-from fpdf import FPDF
 from io import BytesIO
-from PIL import Image
 import asyncio
 import unicodedata
 import re
 import httpx  # Pour les appels API Zelty
+
+# ---------------------------------------------------------------------------
+# Lazy proxies for heavy modules (PIL, fpdf, sendgrid).
+# Deferring these imports out of the cold-start path speeds up pod boot,
+# so K8s liveness probes see /health up faster.
+# The proxies expose the same public API (`Image.new(...)`, `FPDF()`, etc.)
+# so no call sites had to change.
+# ---------------------------------------------------------------------------
+class _LazyModule:
+    """Attribute-forwarding proxy that imports the underlying module on first access."""
+    __slots__ = ("_name", "_module")
+    def __init__(self, name):
+        object.__setattr__(self, "_name", name)
+        object.__setattr__(self, "_module", None)
+    def _load(self):
+        m = object.__getattribute__(self, "_module")
+        if m is None:
+            import importlib
+            m = importlib.import_module(object.__getattribute__(self, "_name"))
+            object.__setattr__(self, "_module", m)
+        return m
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+    def __call__(self, *args, **kwargs):
+        # Not typically used for a module, but harmless.
+        return self._load()(*args, **kwargs)
+
+class _LazyClass:
+    """Callable proxy that imports and instantiates the underlying class on first call."""
+    __slots__ = ("_mod", "_attr", "_cls")
+    def __init__(self, mod, attr):
+        object.__setattr__(self, "_mod", mod)
+        object.__setattr__(self, "_attr", attr)
+        object.__setattr__(self, "_cls", None)
+    def _get_class(self):
+        c = object.__getattribute__(self, "_cls")
+        if c is None:
+            import importlib
+            m = importlib.import_module(object.__getattribute__(self, "_mod"))
+            c = getattr(m, object.__getattribute__(self, "_attr"))
+            object.__setattr__(self, "_cls", c)
+        return c
+    def __call__(self, *args, **kwargs):
+        return self._get_class()(*args, **kwargs)
+    def __getattr__(self, item):
+        return getattr(self._get_class(), item)
+
+Image = _LazyModule('PIL.Image')
+ImageDraw = _LazyModule('PIL.ImageDraw')
+ImageFont = _LazyModule('PIL.ImageFont')
+FPDF = _LazyClass('fpdf', 'FPDF')
+Mail = _LazyClass('sendgrid.helpers.mail', 'Mail')
+SendGridAPIClient = _LazyClass('sendgrid', 'SendGridAPIClient')
 
 ROOT_DIR = Path(__file__).parent
 
@@ -67,7 +117,13 @@ async def _do_regenerate_translations(restaurant_id: str):
     """
     try:
         import hashlib
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        # The `emergentintegrations` import loads litellm (~1s) which does sync file I/O
+        # to enumerate providers. Do it in a worker thread so the event loop isn't stalled
+        # on the first translation call.
+        def _import_llm():
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            return LlmChat, UserMessage
+        LlmChat, UserMessage = await asyncio.to_thread(_import_llm)
         
         logging.info(f"[TRANSLATE] Auto-regenerating translations for restaurant {restaurant_id}")
         
@@ -7507,6 +7563,7 @@ async def get_invoice_pdf(
     # Logo (si disponible)
     if restaurant.get("logo_base64"):
         try:
+            from PIL import Image as PILImage  # local import (lazy) — safe for cold-start
             logo_data = base64.b64decode(restaurant["logo_base64"])
             logo_image = PILImage.open(io.BytesIO(logo_data))
             logo_temp = io.BytesIO()

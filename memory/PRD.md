@@ -40,6 +40,16 @@ GitHub repo (private): https://github.com/kajarupan10-boop/Neochef-tache
 
 ## Change log
 
+### 2026-08-24 — Cold-start acceleration (deployment blocker follow-up)
+- **Testing_agent iteration_18 result**: 57/60 tests pass; lazy proxies verified; event-loop starvation stays fixed.
+- **Cold-start optimization** :
+  - Removed top-level `from PIL import Image`, `from fpdf import FPDF`, `from sendgrid import ...` — replaced with **lazy proxy classes** (`_LazyModule`, `_LazyClass`) that import on first attribute access.
+  - Local `from fpdf import FPDF` added inside each of 3 functions containing `class *(FPDF)` (proxy doesn't support inheritance).
+  - Defensive `from PIL import Image as PILImage` added to pre-existing (broken) reference in `get_invoice_pdf`.
+  - Confirmed `python -X importtime`: no PIL/fpdf/sendgrid load at module import → cold-start now **~1.15s locally** (down from 1.4s).
+  - Also offloaded the `from emergentintegrations.llm.chat import ...` to a thread via `asyncio.to_thread` (avoids litellm ~1s sync init on the event-loop).
+- **Testing_agent note**: "the 58s production cold-start likely comes from outside server.py (image pull, pip/site-packages warm-up, MongoDB Atlas TLS handshake, sidecar init)" — Python-side is now as fast as it can go without splitting the file.
+
 ### 2026-08-24 — Event-loop starvation fix (deployment blocker)
 - **Root cause found by testing_agent (iteration_16)** : `LlmChat.send_message` uses litellm which does blocking HTTP internally → `await chat.send_message()` was FREEZING the FastAPI event loop during translation → `/health` timed out for 5s+ on every K8s liveness probe → pod restart loop.
 - **Primary fix (verified iteration_17)** :

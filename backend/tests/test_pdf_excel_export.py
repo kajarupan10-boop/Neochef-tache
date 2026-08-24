@@ -10,8 +10,13 @@ Tests:
 import pytest
 import requests
 import os
+from dotenv import dotenv_values
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+_frontend_env = dotenv_values("/app/frontend/.env")
+_base = os.environ.get('REACT_APP_BACKEND_URL') or _frontend_env.get('REACT_APP_BACKEND_URL')
+if not _base:
+    raise RuntimeError("REACT_APP_BACKEND_URL missing from env and /app/frontend/.env")
+BASE_URL = _base.rstrip('/')
 
 class TestPDFExcelExport:
     """Test PDF and Excel export endpoints"""
@@ -197,8 +202,9 @@ class TestHealthEndpoints:
     """Test basic health endpoints"""
     
     def test_health(self):
-        """Test health endpoint"""
-        response = requests.get(f"{BASE_URL}/health")
+        """Test health endpoint (non-/api paths are only routed to the backend
+        inside the pod; the public ingress sends them to the frontend)."""
+        response = requests.get("http://localhost:8001/health")
         assert response.status_code == 200
         print("✓ Health endpoint OK")
     

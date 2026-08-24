@@ -1,0 +1,51 @@
+{
+  "summary": "Backend-only regression for the iteration-18 lazy-import cold-start fix + re-verification of the iteration-17 event-loop starvation fix. RESULT: 57 passed / 1 failed (pre-existing minor) / 2 skipped across 4 pytest files. Lazy proxies verified: `import server` = 0.97-1.15s, sys.modules after import contains NO PIL/fpdf/sendgrid (also confirmed with -X importtime), no top-level import statements for those modules, and all 6 proxies (Image.new, ImageDraw.Draw, ImageFont.load_default/truetype, FPDF(), Mail(), SendGridAPIClient()) resolve and work on first access. The 3 `class *(FPDF)` sites all keep a local `from fpdf import FPDF` within 6 preceding lines. Runtime PIL/fpdf paths exercised over HTTP with no NameError/500: /api/ardoise/export-pdf (200, %PDF), /api/ardoise/export-social/{token} (200 PNG, both formats), fiche-technique PDF + Excel export, order PDF, monthly report. Health: /health, /healthz, /ready, /api/health all 200 in 2-3ms locally. Login OK -> session_token. Cache-hit GET /api/public/translations/rest_efb3705687ef = 7 languages (435 en keys) in 175-389ms, no LLM. POST .../generate = 202 in 180-232ms. Event-loop starvation stays FIXED: during a REAL background 7-language translation (litellm calls confirmed in logs, per-language incremental persist confirmed) 20-25 consecutive /health probes stayed at 1.6-3ms. NEW MINOR finding: exactly one reproducible ~840-1007ms /health stall on the FIRST translation after a backend restart, caused by `from emergentintegrations.llm.chat import LlmChat` (server.py:120) executing on the event loop and pulling litellm+tiktoken (measured 1.98s import). Subsequent runs in the same process show no spike. Iteration-17 CRITICAL bug (Le Cercle cache never populated) is FIXED: concurrent languages + incremental persist + hash short-circuit all verified. Backend cold start locally is ~1-1.5s from process start to 'Application startup complete' (log timestamps), so the reported 58s production cold start is not attributable to Python import time anymore.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "translation background task (server.py:120)",
+        "issue": "`from emergentintegrations.llm.chat import LlmChat, UserMessage` runs inside the async coroutine, i.e. ON the event loop. That import costs 1.98s (litellm + tiktoken), producing one reproducible 840-1007ms /health stall on the first translation of each process (measured twice after a fresh backend restart; no spike on later runs). With a K8s liveness timeoutSeconds=1 this can still fail a probe. Fix: `LlmChat, UserMessage = await asyncio.to_thread(_import_llm)` or warm the import in a thread during startup."
+      },
+      {
+        "endpoint": "GET /api/public/translations/{restaurant_id}",
+        "issue": "STILL PRESENT from iteration 17: 5 legacy mep_translations docs store the language keys at document top level (no 'translations' wrapper) -> endpoint returns {}. Reproduced with rest_963812abe3f4 (test_legacy_format_docs_are_served FAILS). Needs a backward-compatible read or a one-off migration."
+      },
+      {
+        "endpoint": "GET /health, /healthz, /ready via public ingress",
+        "issue": "Informational only: non-/api paths are routed to the frontend by the preview ingress, so these return 404 externally (200 in-pod on :8001). K8s probes hit the pod directly, so this is not a code bug - but any external uptime check must use /api/health."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_lazy_imports.py",
+    "/app/backend/tests/test_lazy_runtime_paths.py",
+    "/app/backend/tests/test_coldstart_regression.py",
+    "/app/backend/tests/test_pdf_excel_export.py",
+    "/app/test_reports/pytest/iteration_18.xml"
+  ],
+  "action_items": [
+    "Move `from emergentintegrations.llm.chat import LlmChat, UserMessage` (server.py:120) off the event loop (asyncio.to_thread) or warm it up in a startup thread - removes the last sub-second event-loop stall.",
+    "Fix the legacy translation document format read in GET /api/public/translations/{id} (5 restaurants currently return {}).",
+    "Cold-start: Python import is now ~1s and startup->'Application startup complete' is ~1-1.5s locally, so the 58s production cold start must come from outside server.py (image pull, pip/site-packages warm-up, MongoDB connect latency in prod, sidecar/nginx ordering). Consider making the startup event fully non-blocking and confirming there are no synchronous DB round-trips at import (motor client creation logs '[STARTUP] MongoDB connected' at import time - it is lazy, so OK)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~17.5k lines - far above the 700-line guideline; the lazy-proxy trick is a symptom of a module that should be split into routers (menu, ardoise, invoices, events, exports).",
+    "_LazyClass cannot be used as a base class; the 3 `class *(FPDF)` sites depend on a local import placed a few lines above. Add a short comment at the proxy definition (or a module-level assert/test, now covered by test_lazy_imports.py) so a future refactor does not silently break PDF generation.",
+    "The translation background task swallows all per-batch exceptions with `continue`; a fully failed language still persists an empty map, which then looks like a valid cache entry. Consider skipping persist when lang_map is empty."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lazy_imports.py (new)",
+    "/app/backend/tests/test_lazy_runtime_paths.py (new)",
+    "/app/backend/tests/test_coldstart_regression.py (added TestEventLoopStarvationLight - fast 30s starvation check on a 2-item restaurant instead of the 232-item Le Cercle run)",
+    "/app/backend/tests/test_pdf_excel_export.py (test-only: BASE_URL now falls back to /app/frontend/.env; /health probed in-pod)"
+  ],
+  "success_rate": {"backend": "98% (57/58 executed assertions-tests passed; 1 known pre-existing minor failure)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None persisted. Temporarily invalidated content_hash of mep_translations for rest_3b7aad7c27be (2-item restaurant) to force a real background translation, then restored the original document. Le Cercle cache was NOT regenerated (as instructed).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (holding) - present and valid in /app/memory/test_credentials.md",
+  "context_for_next_testing_agent": "Use `pytest tests/test_lazy_imports.py tests/test_lazy_runtime_paths.py tests/test_coldstart_regression.py tests/test_pdf_excel_export.py --deselect tests/test_coldstart_regression.py::TestEventLoopStarvationRegression`. The deselected heavy class forces a 232-item x 7-language Le Cercle regeneration (~minutes, LLM cost); use TestEventLoopStarvationLight instead (rest_3b7aad7c27be, ~30s). The ~1s health spike only reproduces on the FIRST translation after `supervisorctl restart backend`; run that test right after a restart to see it. test_legacy_format_docs_are_served is an expected failure until the legacy-format read bug is fixed.",
+  "rca_of_the_issue": "Cold-start: heavy modules are genuinely out of the import path now (verified via sys.modules and -X importtime); server import = 0.97s, uvicorn startup complete <1.5s after process start. Remaining event-loop stall RCA: litellm/tiktoken (1.98s import) is pulled synchronously by the `from emergentintegrations.llm.chat import ...` statement located inside the async translation coroutine, so the first translation per process blocks the loop for ~1s; all subsequent LLM work is correctly offloaded via asyncio.to_thread and health stays at 1.6-3ms."
+}
