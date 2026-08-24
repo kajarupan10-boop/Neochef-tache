@@ -140,11 +140,42 @@
             <button type="submit" class="btn-primary" id="login-submit" data-testid="login-submit">Se connecter</button>
             <div id="login-error" class="error" data-testid="login-error"></div>
         </form>
+        <div class="footer-links" style="margin-top: 14px;">
+            <a href="#" id="go-forgot" data-testid="go-forgot">Mot de passe oublié ?</a>
+        </div>
         <div class="footer-links" style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
             <a href="#" id="go-register-restaurant" data-testid="go-register-restaurant">Créer un restaurant</a>
             <span style="opacity:0.4">·</span>
             <a href="#" id="go-register-holding" data-testid="go-register-holding">Créer un groupe (Holding)</a>
         </div>
+    </section>
+
+    <!-- ===== FORGOT PASSWORD VIEW ===== -->
+    <section id="forgot-view" class="card" data-testid="forgot-view" style="display:none;">
+        <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;">Mot de passe oublié</h2>
+        <p style="color:#94a3c4;font-size:13.5px;margin:0 0 20px;line-height:1.5;">Entrez votre email. Nous vous enverrons un lien pour créer un nouveau mot de passe.</p>
+        <form id="forgot-form" autocomplete="off">
+            <div class="field"><label for="forgot-email">Email</label>
+                <input id="forgot-email" type="email" required placeholder="votre@email.com" data-testid="forgot-email" /></div>
+            <button type="submit" class="btn-primary" data-testid="forgot-submit">Envoyer le lien</button>
+            <div id="forgot-msg" class="error" data-testid="forgot-msg" style="background:rgba(31,214,191,0.12);border-color:rgba(31,214,191,0.3);color:#7dd3fc;"></div>
+        </form>
+        <div class="footer-links"><a href="#" data-testid="forgot-back" class="back-to-login">← Retour à la connexion</a></div>
+    </section>
+
+    <!-- ===== RESET PASSWORD VIEW (opened via ?token=... in URL) ===== -->
+    <section id="reset-view" class="card" data-testid="reset-view" style="display:none;">
+        <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;">Nouveau mot de passe</h2>
+        <p style="color:#94a3c4;font-size:13.5px;margin:0 0 20px;line-height:1.5;">Choisissez un nouveau mot de passe. Ce lien expire dans 1 heure.</p>
+        <form id="reset-form" autocomplete="off">
+            <div class="field"><label for="reset-password-input">Nouveau mot de passe</label>
+                <input id="reset-password-input" type="password" required minlength="4" placeholder="••••••••" data-testid="reset-password-input" /></div>
+            <div class="field"><label for="reset-password-confirm">Confirmer</label>
+                <input id="reset-password-confirm" type="password" required minlength="4" placeholder="••••••••" data-testid="reset-password-confirm" /></div>
+            <button type="submit" class="btn-primary" data-testid="reset-submit">Enregistrer</button>
+            <div id="reset-error" class="error" data-testid="reset-error"></div>
+        </form>
+        <div class="footer-links"><a href="#" data-testid="reset-back" class="back-to-login">← Retour à la connexion</a></div>
     </section>
 
     <!-- ===== REGISTER RESTAURANT VIEW ===== -->
@@ -223,6 +254,8 @@
     const RESTAURANT_KEY = 'restaurant_branding';
 
     const loginView = document.getElementById('login-view');
+    const forgotView = document.getElementById('forgot-view');
+    const resetView = document.getElementById('reset-view');
     const registerRestView = document.getElementById('register-restaurant-view');
     const registerHoldView = document.getElementById('register-holding-view');
     const moduleView = document.getElementById('module-view');
@@ -234,6 +267,8 @@
 
     function hideAll() {
         loginView.style.display = 'none';
+        forgotView.style.display = 'none';
+        resetView.style.display = 'none';
         registerRestView.style.display = 'none';
         registerHoldView.style.display = 'none';
         moduleView.style.display = 'none';
@@ -267,16 +302,61 @@
     }
     function showRegisterRestaurant() { hideAll(); registerRestView.style.display = 'block'; }
     function showRegisterHolding() { hideAll(); registerHoldView.style.display = 'block'; }
+    function showForgot() { hideAll(); forgotView.style.display = 'block'; document.getElementById('forgot-msg').classList.remove('show'); }
+    function showReset() { hideAll(); resetView.style.display = 'block'; document.getElementById('reset-error').classList.remove('show'); }
     function persistSession(data) {
         localStorage.setItem(TOKEN_KEY, data.session_token);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         if (data.restaurant) localStorage.setItem(RESTAURANT_KEY, JSON.stringify(data.restaurant));
     }
 
-    // Register-restaurant / holding link + back link handlers
+    // Register-restaurant / holding / forgot link + back link handlers
     document.getElementById('go-register-restaurant').addEventListener('click', e => { e.preventDefault(); showRegisterRestaurant(); });
     document.getElementById('go-register-holding').addEventListener('click', e => { e.preventDefault(); showRegisterHolding(); });
-    document.querySelectorAll('.back-to-login').forEach(el => el.addEventListener('click', e => { e.preventDefault(); showLogin(); }));
+    document.getElementById('go-forgot').addEventListener('click', e => { e.preventDefault(); showForgot(); });
+    document.querySelectorAll('.back-to-login').forEach(el => el.addEventListener('click', e => { e.preventDefault(); history.replaceState(null, '', '/'); showLogin(); }));
+
+    // Forgot-password submit → POST /api/auth/forgot-password
+    document.getElementById('forgot-form').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const msg = document.getElementById('forgot-msg');
+        msg.classList.remove('show');
+        const btn = forgotView.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Envoi…';
+        try {
+            const res = await fetch('/api/auth/forgot-password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: document.getElementById('forgot-email').value.trim() }) });
+            const data = await res.json();
+            msg.textContent = data?.message || 'Si un compte existe, un email a été envoyé.';
+            msg.classList.add('show');
+        } catch (e) {
+            msg.style.background = 'rgba(239,68,68,0.12)'; msg.style.borderColor = 'rgba(239,68,68,0.3)'; msg.style.color = '#fca5a5';
+            msg.textContent = 'Erreur réseau'; msg.classList.add('show');
+        } finally { btn.disabled = false; btn.textContent = 'Envoyer le lien'; }
+    });
+
+    // Reset-password submit → POST /api/auth/reset-password-with-token
+    document.getElementById('reset-form').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const err = document.getElementById('reset-error');
+        err.classList.remove('show');
+        const p1 = document.getElementById('reset-password-input').value;
+        const p2 = document.getElementById('reset-password-confirm').value;
+        if (p1 !== p2) { err.textContent = 'Les mots de passe ne correspondent pas'; err.classList.add('show'); return; }
+        const btn = resetView.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Enregistrement…';
+        const token = new URLSearchParams(location.search).get('token') || '';
+        try {
+            const res = await fetch('/api/auth/reset-password-with-token', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token, new_password: p1 }) });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data?.detail || 'Erreur'; err.classList.add('show'); return; }
+            history.replaceState(null, '', '/');
+            showLogin();
+            loginError.style.background = 'rgba(31,214,191,0.12)'; loginError.style.borderColor = 'rgba(31,214,191,0.3)'; loginError.style.color = '#7dd3fc';
+            loginError.textContent = data?.message || 'Mot de passe mis à jour. Connectez-vous.';
+            loginError.classList.add('show');
+        } catch (e) { err.textContent = 'Erreur réseau'; err.classList.add('show'); }
+        finally { btn.disabled = false; btn.textContent = 'Enregistrer'; }
+    });
 
     async function registerRestaurant(ev) {
         ev.preventDefault();
@@ -322,6 +402,13 @@
     document.getElementById('register-holding-form').addEventListener('submit', registerHolding);
 
     async function attemptSessionRestore() {
+        // If URL has a reset token, prioritize the reset flow over session restore
+        const urlToken = new URLSearchParams(location.search).get('token');
+        const isResetPath = location.pathname.replace(/\/$/, '').endsWith('/reset-password') || location.pathname === '/reset-password';
+        if (urlToken && (isResetPath || urlToken.length > 10)) {
+            showReset();
+            return;
+        }
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) { showLogin(); return; }
         try {
