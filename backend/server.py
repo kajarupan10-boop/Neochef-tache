@@ -14,8 +14,7 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
 import base64
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+# sendgrid is lazy-imported inside send_password_reset_email() to avoid loading it at cold start
 from fpdf import FPDF
 from io import BytesIO
 from PIL import Image
@@ -1666,6 +1665,8 @@ async def send_password_reset_email(email: str, reset_token: str, user_name: str
     </div>
     """
     try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
         message = Mail(from_email=SENDGRID_FROM_EMAIL, to_emails=email, subject=subject, html_content=html_content)
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(message)
@@ -6548,6 +6549,7 @@ def apply_blue_tint_to_logo(logo_data: bytes, target_color: tuple = (26, 58, 92)
     """Appliquer une teinte bleue RAL 5008 au logo
     Transforme toutes les couleurs non-transparentes vers la couleur cible en préservant la luminosité"""
     try:
+        from PIL import Image
         img = Image.open(BytesIO(logo_data))
         # Convertir en RGBA pour gérer la transparence
         img = img.convert("RGBA")
@@ -14641,6 +14643,7 @@ async def export_planned_ardoise_pdf(restaurant_id: str, days: int = 7):
             planned = [{"date": today.isoformat(), "entree": current.get("entree", []), "plat": current.get("plat", []), "dessert": current.get("dessert", [])}]
     
     # Générer le PDF en paysage
+    from fpdf import FPDF
     class PlanningPDF(FPDF):
         def header(self):
             self.set_font("Helvetica", "B", 14)
@@ -15153,6 +15156,7 @@ async def export_ardoise_sales_pdf(
                     items_stats[name]["total_qty"] += qty
     
     # Générer le PDF avec FPDF
+    from fpdf import FPDF
     class ArdoisePDF(FPDF):
         def header(self):
             self.set_font("Helvetica", "B", 18)
@@ -15477,6 +15481,7 @@ async def export_ardoise_sales_pdf_by_restaurant(
                     items_stats[name]["total_qty"] += qty
     
     # Générer le PDF avec FPDF - FORMAT PAYSAGE
+    from fpdf import FPDF
     class ArdoisePDF(FPDF):
         def header(self):
             self.set_font("Helvetica", "B", 16)
@@ -16076,6 +16081,7 @@ async def export_ardoise_social(
     restaurant_name = restaurant.get("name", "Restaurant") if restaurant else "Restaurant"
     
     # Créer l'image avec fond bleu RAL 5008
+    from PIL import Image, ImageDraw, ImageFont
     img = Image.new('RGB', (width, height), color=(38, 55, 74))
     draw = ImageDraw.Draw(img)
     
