@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#0b1220" />
+<title>Menu — NeoChef</title>
+<link rel="icon" href="/neochef-logo.png" />
+<link rel="apple-touch-icon" href="/neochef-logo.png" />
+<style>
+    *,*::before,*::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+        background:
+            radial-gradient(1200px 800px at 15% -10%, rgba(46, 197, 191, 0.14), transparent 60%),
+            radial-gradient(900px 600px at 90% 110%, rgba(45, 108, 240, 0.18), transparent 55%),
+            #0b1220;
+        color: #e8f1ff;
+        min-height: 100vh;
+        padding-bottom: env(safe-area-inset-bottom, 32px);
+    }
+    .stage { max-width: 780px; margin: 0 auto; padding: 20px 18px 60px; }
+
+    /* Sticky header */
+    header.stage-header {
+        position: sticky; top: 0; z-index: 20;
+        background: rgba(11,18,32,0.85);
+        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand-logo { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; flex-shrink: 0; background: rgba(255,255,255,0.05); }
+    .brand-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Language picker */
+    .lang-picker {
+        display: flex; gap: 4px; background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; padding: 3px;
+        flex-shrink: 0; overflow-x: auto; max-width: 60%;
+    }
+    .lang-btn {
+        border: none; background: transparent; color: #94a3c4;
+        padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer;
+        font-family: inherit; text-transform: uppercase; letter-spacing: 0.06em;
+        transition: all .15s ease;
+    }
+    .lang-btn:hover { color: #e8f1ff; }
+    .lang-btn.active { background: linear-gradient(140deg, #1fd6bf 0%, #2f80ff 100%); color: #fff; }
+
+    /* Restaurant hero */
+    .hero { padding: 28px 6px 20px; text-align: center; }
+    .hero h1 { margin: 8px 0 4px; font-size: 28px; font-weight: 800; letter-spacing: -0.02em;
+        background: linear-gradient(180deg, #ffffff, #7dd3fc 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero p { margin: 0; color: #94a3c4; font-size: 13.5px; }
+
+    /* Sections */
+    .section { margin: 20px 0 26px; }
+    .section-title {
+        margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em;
+        color: #7dd3fc; text-transform: uppercase; padding: 0 4px;
+    }
+    .item {
+        padding: 16px 18px; border-radius: 14px; margin-bottom: 10px;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+        transition: background .12s ease, border-color .12s ease;
+    }
+    .item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+    .item-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .item-name { font-size: 15.5px; font-weight: 700; color: #e8f1ff; }
+    .item-price { color: #7dd3fc; font-weight: 700; font-size: 14.5px; font-variant-numeric: tabular-nums; }
+    .item-desc { margin: 6px 0 0; color: #94a3c4; font-size: 13px; line-height: 1.45; }
+    .item-formats { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .format {
+        background: rgba(31,214,191,0.09); border: 1px solid rgba(31,214,191,0.20); color: #7dd3fc;
+        padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    }
+
+    /* Loading / empty */
+    .loading, .empty {
+        padding: 60px 20px; text-align: center; color: #94a3c4; font-size: 14px;
+    }
+    .spinner {
+        width: 32px; height: 32px; margin: 0 auto 14px; border-radius: 50%;
+        border: 3px solid rgba(125,211,252,0.15); border-top-color: #7dd3fc;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer.credit { text-align: center; margin-top: 32px; color: #5a6b8c; font-size: 11px; padding: 12px; }
+    footer.credit a { color: #7dd3fc; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header class="stage-header">
+    <div class="brand">
+        <img id="restaurant-logo" class="brand-logo" src="/neochef-logo.png" alt="" />
+        <div class="brand-name" id="restaurant-name">…</div>
+    </div>
+    <div class="lang-picker" id="lang-picker" role="tablist" aria-label="Langue">
+        <!-- filled by JS -->
+    </div>
+</header>
+
+<main class="stage">
+    <div class="hero">
+        <h1 id="hero-name">…</h1>
+        <p id="hero-sub">Menu du restaurant</p>
+    </div>
+    <div id="content" class="loading" data-testid="menu-content">
+        <div class="spinner"></div>
+        Chargement du menu…
+    </div>
+    <footer class="credit">
+        Menu multilingue propulsé par <a href="/">NeoChef</a>
+    </footer>
+</main>
+
+<script>
+(function() {
+    // --- Constants ---
+    const LANGS = [
+        { code: 'fr', label: 'FR' },
+        { code: 'en', label: 'EN' },
+        { code: 'es', label: 'ES' },
+        { code: 'de', label: 'DE' },
+        { code: 'it', label: 'IT' },
+        { code: 'pt', label: 'PT' },
+        { code: 'zh', label: '中文' },
+        { code: 'ru', label: 'RU' },
+    ];
+    const TAGLINES = {
+        fr: 'Menu du restaurant',
+        en: 'Restaurant menu',
+        es: 'Menú del restaurante',
+        de: 'Speisekarte',
+        it: 'Menu del ristorante',
+        pt: 'Menu do restaurante',
+        zh: '餐厅菜单',
+        ru: 'Меню ресторана',
+    };
+    const LOADING = {
+        fr: 'Chargement du menu…', en: 'Loading menu…', es: 'Cargando menú…',
+        de: 'Menü wird geladen…', it: 'Caricamento del menu…', pt: 'A carregar o menu…',
+        zh: '正在加载菜单…', ru: 'Загрузка меню…'
+    };
+    const EMPTY = {
+        fr: 'Ce menu est vide pour le moment.', en: 'This menu is empty for now.',
+        es: 'Este menú está vacío por ahora.', de: 'Diese Speisekarte ist derzeit leer.',
+        it: 'Questo menu è vuoto per ora.', pt: 'Este menu está vazio no momento.',
+        zh: '此菜单目前为空。', ru: 'Меню пока пустое.'
+    };
+
+    // --- URL parsing ---
+    // Supported: /client/<restaurant_id_or_share_token>
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const rid = pathParts[pathParts.length - 1];
+    let currentLang = (localStorage.getItem('client-menu-lang') || (navigator.language || 'fr').slice(0, 2).toLowerCase());
+    if (!LANGS.find(l => l.code === currentLang)) currentLang = 'fr';
+
+    // --- State ---
+    let restaurantData = null;
+    let sectionsRaw = [];
+    let itemsRaw = [];
+    let translations = {};  // { en: { section_id_name: '...', item_id_name: '...' }, ... }
+
+    // --- API ---
+    async function fetchJson(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+    }
+
+    async function loadAll() {
+        try {
+            const [menu, trans] = await Promise.all([
+                fetchJson(`/api/menu-restaurant/public/${encodeURIComponent(rid)}`),
+                fetchJson(`/api/public/translations/${encodeURIComponent(rid)}`).catch(() => ({})),
+            ]);
+            restaurantData = menu.restaurant || {};
+            sectionsRaw = menu.sections || [];
+            itemsRaw = menu.items || [];
+            translations = trans || {};
+            renderHeader();
+            renderLangPicker();
+            render();
+        } catch (e) {
+            const c = document.getElementById('content');
+            c.className = 'empty';
+            c.innerHTML = `<div style="font-size:36px;margin-bottom:8px;">⚠️</div>Restaurant introuvable ou menu indisponible.`;
+        }
+    }
+
+    // --- Rendering ---
+    function tr(type, id, field, fallback) {
+        if (currentLang === 'fr') return fallback;
+        const key = `${type}_${id}_${field}`;
+        const langMap = translations[currentLang] || {};
+        return langMap[key] || fallback;
+    }
+
+    function renderHeader() {
+        if (restaurantData?.logo_base64) {
+            document.getElementById('restaurant-logo').src = `data:image/png;base64,${restaurantData.logo_base64}`;
+        }
+        document.getElementById('restaurant-name').textContent = restaurantData?.name || 'Menu';
+        document.getElementById('hero-name').textContent = restaurantData?.name || 'Menu';
+    }
+
+    function renderLangPicker() {
+        const picker = document.getElementById('lang-picker');
+        // Only show languages that have translations (or FR which is source)
+        const avail = new Set(['fr', ...Object.keys(translations || {})]);
+        const shown = LANGS.filter(l => avail.has(l.code));
+        picker.innerHTML = shown.map(l =>
+            `<button class="lang-btn ${l.code === currentLang ? 'active' : ''}"
+                     data-lang="${l.code}"
+                     data-testid="lang-${l.code}"
+                     role="tab" aria-selected="${l.code === currentLang}">${l.label}</button>`
+        ).join('');
+        picker.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const code = btn.getAttribute('data-lang');
+                if (code === currentLang) return;
+                currentLang = code;
+                localStorage.setItem('client-menu-lang', code);
+                document.documentElement.lang = code;
+                renderLangPicker();
+                render();
+            });
+        });
+    }
+
+    function fmtPrice(v) {
+        if (v == null || v === '') return '';
+        const n = Number(v);
+        if (Number.isNaN(n)) return '';
+        return `${n.toFixed(2).replace('.', ',')} €`;
+    }
+
+    function render() {
+        document.getElementById('hero-sub').textContent = TAGLINES[currentLang] || TAGLINES.fr;
+        const content = document.getElementById('content');
+        content.className = '';
+
+        // Group items by section_id in the section order
+        const sorted = [...sectionsRaw].sort((a,b) => (a.order||0) - (b.order||0));
+        const itemsBySec = new Map();
+        for (const it of itemsRaw) {
+            if (it.status === 'a_supprimer' || it.status === 'deleted') continue;
+            const s = it.section_id;
+            if (!itemsBySec.has(s)) itemsBySec.set(s, []);
+            itemsBySec.get(s).push(it);
+        }
+        for (const arr of itemsBySec.values()) {
+            arr.sort((a,b) => (a.order||0) - (b.order||0));
+        }
+
+        if (sorted.length === 0) {
+            content.className = 'empty';
+            content.textContent = EMPTY[currentLang] || EMPTY.fr;
+            return;
+        }
+
+        content.innerHTML = sorted.map(sec => {
+            const items = itemsBySec.get(sec.section_id) || [];
+            if (!items.length) return '';
+            return `
+                <section class="section" data-testid="section-${sec.section_id}">
+                    <h2 class="section-title">${escapeHtml(tr('section', sec.section_id, 'name', sec.name || ''))}</h2>
+                    ${items.map(it => renderItem(it)).join('')}
+                </section>
+            `;
+        }).join('') || `<div class="empty">${EMPTY[currentLang] || EMPTY.fr}</div>`;
+    }
+
+    function renderItem(it) {
+        const name = tr('item', it.item_id, 'name', it.name || '');
+        const descs = (it.descriptions || []).map((d, i) => tr('item', it.item_id, `description_${i}`, d || '')).filter(Boolean);
+        const formats = (it.selling_formats || []).map((f, i) => {
+            const fname = tr('item', it.item_id, `format_${i}`, f?.name || '');
+            const fprice = fmtPrice(f?.price);
+            return `<span class="format">${escapeHtml(fname)}${fprice ? ' · ' + escapeHtml(fprice) : ''}</span>`;
+        }).join('');
+        const priceHtml = (it.selling_formats && it.selling_formats.length) ? '' : fmtPrice(it.price);
+
+        return `
+            <article class="item" data-testid="item-${it.item_id}">
+                <div class="item-head">
+                    <span class="item-name">${escapeHtml(name)}</span>
+                    ${priceHtml ? `<span class="item-price">${escapeHtml(priceHtml)}</span>` : ''}
+                </div>
+                ${descs.length ? `<p class="item-desc">${descs.map(escapeHtml).join('<br/>')}</p>` : ''}
+                ${formats ? `<div class="item-formats">${formats}</div>` : ''}
+            </article>
+        `;
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    // --- Initial loading text ---
+    const initEl = document.getElementById('content');
+    initEl.innerHTML = `<div class="spinner"></div>${LOADING[currentLang] || LOADING.fr}`;
+
+    // --- Kick off ---
+    if (!rid || rid === 'client') {
+        initEl.className = 'empty';
+        initEl.textContent = 'ID du restaurant manquant dans l\'URL.';
+    } else {
+        loadAll();
+    }
+})();
+</script>
+</body>
+</html>

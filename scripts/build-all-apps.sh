@@ -40,6 +40,7 @@ cp -r "${APPS_DIR}/neochef-events/dist" "${BUILD_DIR}/events"
 # Landing page + serve.json rewrites
 cp "${LANDING_SRC}"     "${BUILD_DIR}/index.html"
 cp "${SERVE_JSON_SRC}"  "${BUILD_DIR}/serve.json"
+cp /app/scripts/client-menu.html "${BUILD_DIR}/client-menu.html"
 # NeoChef logo (referenced by /neochef-logo.png in the landing HTML)
 cp /app/scripts/neochef-logo.png "${BUILD_DIR}/neochef-logo.png" 2>/dev/null || true
 

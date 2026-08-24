@@ -5,6 +5,7 @@
     { "source": "/", "destination": "/index.html" },
     { "source": "/reset-password", "destination": "/index.html" },
     { "source": "/reset-password/**", "destination": "/index.html" },
+    { "source": "/client/**", "destination": "/client-menu.html" },
     { "source": "/taches/**", "destination": "/taches/index.html" },
     { "source": "/menu/**",   "destination": "/menu/index.html" },
     { "source": "/events/**", "destination": "/events/index.html" }
