@@ -119,45 +119,59 @@
 
         /* ===== SETTINGS VIEW ===== */
         #settings-view .settings-header {
-            display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+            padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.06);
         }
         #settings-view .back-icon {
-            width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-            color: #94a3c4; cursor: pointer; font-size: 18px; transition: all .15s ease;
-            text-decoration: none;
+            width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+            color: #e8f1ff; cursor: pointer; font-size: 18px; transition: all .15s ease;
+            text-decoration: none; flex-shrink: 0;
         }
-        #settings-view .back-icon:hover { background: rgba(255,255,255,0.1); color: #e8f1ff; }
-        #settings-view h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
-        #settings-view .settings-sub { color: #94a3c4; font-size: 13px; margin: 0 0 20px; }
+        #settings-view .back-icon:hover { background: rgba(255,255,255,0.12); border-color: rgba(125,211,252,0.4); }
+        #settings-view h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
         .settings-section {
-            padding: 20px 20px 16px; border-radius: 14px;
+            padding: 20px; border-radius: 16px;
             background: rgba(255,255,255,0.03);
             border: 1px solid rgba(255,255,255,0.06);
             margin-bottom: 14px;
         }
         .settings-section h3 {
-            margin: 0 0 14px; font-size: 13px; font-weight: 700;
-            color: #7dd3fc; text-transform: uppercase; letter-spacing: 0.08em;
+            margin: 0 0 16px; font-size: 11px; font-weight: 700;
+            color: #7dd3fc; text-transform: uppercase; letter-spacing: 0.1em;
         }
-        .settings-section .field { margin-bottom: 10px; }
-        .settings-section .btn-secondary {
-            width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(125,211,252,0.3);
-            background: rgba(31,214,191,0.08); color: #7dd3fc; font-size: 14px; font-weight: 600;
-            cursor: pointer; font-family: inherit; margin-top: 6px;
-            transition: all .15s ease;
+        .settings-section .field { margin-bottom: 12px; }
+        .settings-section .field:last-of-type { margin-bottom: 16px; }
+        .settings-section input:disabled {
+            opacity: 0.55; cursor: not-allowed;
+            background: rgba(255,255,255,0.03);
         }
-        .settings-section .btn-secondary:hover { background: rgba(31,214,191,0.15); border-color: rgba(125,211,252,0.5); }
-        .settings-section .btn-secondary:disabled { opacity: 0.6; cursor: wait; }
+        .settings-section .btn-action {
+            width: 100%; padding: 13px 16px; border-radius: 12px; border: none;
+            background: linear-gradient(140deg, #1fd6bf 0%, #2f80ff 100%);
+            color: #fff; font-size: 14.5px; font-weight: 700; letter-spacing: 0.01em;
+            cursor: pointer; font-family: inherit;
+            transition: transform .12s ease, box-shadow .12s ease, opacity .15s ease;
+            box-shadow: 0 6px 18px rgba(31,214,191,0.20);
+        }
+        .settings-section .btn-action:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(31,214,191,0.30); }
+        .settings-section .btn-action:active { transform: translateY(0); }
+        .settings-section .btn-action:disabled { opacity: 0.6; cursor: wait; transform: none; box-shadow: none; }
         .settings-msg {
-            margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+            margin-top: 12px; padding: 10px 14px; border-radius: 10px; font-size: 13px;
             display: none; text-align: center;
         }
         .settings-msg.show { display: block; }
         .settings-msg.success { background: rgba(31,214,191,0.12); border: 1px solid rgba(31,214,191,0.3); color: #7dd3fc; }
         .settings-msg.error { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
-        .account-info { display: flex; flex-direction: column; gap: 4px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-        .account-info .label { font-size: 11px; color: #94a3c4; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+        .account-info {
+            display: flex; flex-direction: column; gap: 4px;
+            padding: 14px 16px; margin-bottom: 16px;
+            border-radius: 12px;
+            background: rgba(125,211,252,0.06);
+            border: 1px solid rgba(125,211,252,0.15);
+        }
+        .account-info .label { font-size: 10.5px; color: #94a3c4; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
         .account-info .value { font-size: 15px; color: #e8f1ff; font-weight: 600; }
     </style>
 </head>
@@ -297,23 +311,28 @@
     <!-- ===== SETTINGS VIEW (post-login) ===== -->
     <section id="settings-view" data-testid="settings-view" style="display:none;">
         <div class="settings-header">
-            <a href="#" class="back-icon" id="settings-back" data-testid="settings-back" title="Retour">←</a>
+            <a href="#" class="back-icon" id="settings-back" data-testid="settings-back" title="Retour" aria-label="Retour">←</a>
             <h2>Mon compte</h2>
         </div>
-        <p class="settings-sub" id="settings-sub">Nom, email et mot de passe. Pour les paramètres du restaurant (équipe, menu, QR, couleurs…), utilisez la tuile ⚙ Paramètres.</p>
 
-        <!-- Account info -->
+        <!-- Info card -->
+        <div class="account-info">
+            <span class="label">Restaurant / Groupe</span>
+            <span class="value" id="settings-restaurant" data-testid="settings-restaurant">…</span>
+        </div>
+        <div class="account-info">
+            <span class="label">Email actuel</span>
+            <span class="value" id="settings-current-email-view" data-testid="settings-current-email-view">…</span>
+        </div>
+
+        <!-- Change name -->
         <div class="settings-section">
-            <h3>Compte</h3>
-            <div class="account-info">
-                <span class="label">Restaurant / Groupe</span>
-                <span class="value" id="settings-restaurant" data-testid="settings-restaurant">…</span>
-            </div>
+            <h3>Nom affiché</h3>
             <div class="field">
-                <label for="settings-name">Nom affiché</label>
+                <label for="settings-name">Votre nom</label>
                 <input id="settings-name" type="text" required data-testid="settings-name" />
             </div>
-            <button type="button" class="btn-secondary" id="save-name-btn" data-testid="save-name-btn">Enregistrer le nom</button>
+            <button type="button" class="btn-action" id="save-name-btn" data-testid="save-name-btn">Enregistrer</button>
             <div id="name-msg" class="settings-msg" data-testid="name-msg"></div>
         </div>
 
@@ -321,18 +340,14 @@
         <div class="settings-section">
             <h3>Modifier l'email</h3>
             <div class="field">
-                <label for="settings-current-email">Email actuel</label>
-                <input id="settings-current-email" type="email" disabled data-testid="settings-current-email" />
-            </div>
-            <div class="field">
                 <label for="settings-new-email">Nouvel email</label>
-                <input id="settings-new-email" type="email" placeholder="nouveau@email.com" data-testid="settings-new-email" />
+                <input id="settings-new-email" type="email" placeholder="nouveau@email.com" data-testid="settings-new-email" autocomplete="off" />
             </div>
             <div class="field">
                 <label for="settings-email-pass">Mot de passe actuel</label>
-                <input id="settings-email-pass" type="password" placeholder="••••••••" data-testid="settings-email-pass" />
+                <input id="settings-email-pass" type="password" placeholder="••••••••" data-testid="settings-email-pass" autocomplete="current-password" />
             </div>
-            <button type="button" class="btn-secondary" id="save-email-btn" data-testid="save-email-btn">Modifier l'email</button>
+            <button type="button" class="btn-action" id="save-email-btn" data-testid="save-email-btn">Modifier l'email</button>
             <div id="email-msg" class="settings-msg" data-testid="email-msg"></div>
         </div>
 
@@ -341,17 +356,17 @@
             <h3>Modifier le mot de passe</h3>
             <div class="field">
                 <label for="settings-old-pass">Mot de passe actuel</label>
-                <input id="settings-old-pass" type="password" placeholder="••••••••" data-testid="settings-old-pass" />
+                <input id="settings-old-pass" type="password" placeholder="••••••••" data-testid="settings-old-pass" autocomplete="current-password" />
             </div>
             <div class="field">
-                <label for="settings-new-pass">Nouveau mot de passe (min. 6 caractères)</label>
-                <input id="settings-new-pass" type="password" placeholder="••••••••" minlength="6" data-testid="settings-new-pass" />
+                <label for="settings-new-pass">Nouveau mot de passe</label>
+                <input id="settings-new-pass" type="password" placeholder="Minimum 6 caractères" minlength="6" data-testid="settings-new-pass" autocomplete="new-password" />
             </div>
             <div class="field">
                 <label for="settings-confirm-pass">Confirmer le nouveau mot de passe</label>
-                <input id="settings-confirm-pass" type="password" placeholder="••••••••" minlength="6" data-testid="settings-confirm-pass" />
+                <input id="settings-confirm-pass" type="password" placeholder="••••••••" minlength="6" data-testid="settings-confirm-pass" autocomplete="new-password" />
             </div>
-            <button type="button" class="btn-secondary" id="save-pass-btn" data-testid="save-pass-btn">Modifier le mot de passe</button>
+            <button type="button" class="btn-action" id="save-pass-btn" data-testid="save-pass-btn">Modifier le mot de passe</button>
             <div id="pass-msg" class="settings-msg" data-testid="pass-msg"></div>
         </div>
 
@@ -586,8 +601,8 @@
         const r = currentRestaurant();
         if (!u) { showLogin(); return; }
         document.getElementById('settings-restaurant').textContent = computeWelcomeSubtitle(u, r);
+        document.getElementById('settings-current-email-view').textContent = u.email || '—';
         document.getElementById('settings-name').value = u.name || '';
-        document.getElementById('settings-current-email').value = u.email || '';
         // Clear write fields
         ['settings-new-email','settings-email-pass','settings-old-pass','settings-new-pass','settings-confirm-pass'].forEach(id => {
             const el = document.getElementById(id); if (el) el.value = '';
@@ -638,6 +653,7 @@
             const data = await res.json();
             if (!res.ok) { showMsg('name-msg', data?.detail || 'Erreur', false); return; }
             const u = currentUser(); if (u) { u.name = newName; localStorage.setItem(USER_KEY, JSON.stringify(u)); }
+            welcomeName.textContent = newName;
             showMsg('name-msg', 'Nom mis à jour', true);
         } catch (e) { showMsg('name-msg', 'Erreur réseau', false); }
         finally { btn.disabled = false; btn.textContent = label; }
@@ -660,7 +676,7 @@
             const data = await res.json();
             if (!res.ok) { showMsg('email-msg', data?.detail || 'Erreur', false); return; }
             const u = currentUser(); if (u) { u.email = data.email || newEmail; localStorage.setItem(USER_KEY, JSON.stringify(u)); }
-            document.getElementById('settings-current-email').value = data.email || newEmail;
+            document.getElementById('settings-current-email-view').textContent = data.email || newEmail;
             document.getElementById('settings-new-email').value = '';
             document.getElementById('settings-email-pass').value = '';
             showMsg('email-msg', data?.message || 'Email mis à jour', true);
