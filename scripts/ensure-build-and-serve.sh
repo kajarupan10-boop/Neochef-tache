@@ -30,6 +30,7 @@ if [ $need_rebuild -eq 1 ]; then
     done
     cp /app/scripts/landing-index.html "$BUILD/index.html"
     cp /app/scripts/landing-serve.json "$BUILD/serve.json"
+    cp /app/scripts/neochef-logo.png   "$BUILD/neochef-logo.png" 2>/dev/null || true
     cp "$BUILD/taches/favicon.ico"     "$BUILD/favicon.ico" 2>/dev/null || true
     python3 /app/scripts/postprocess-builds.py
   else

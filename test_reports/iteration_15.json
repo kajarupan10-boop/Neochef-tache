@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only regression of the 3 fixes from this iteration (transparent logo on login page + removal of the settings gear from all 3 sub-app headers). All 5 requested verifications PASS. (1) On https://chef-tasks.preview.emergentagent.com/ with empty localStorage, login-view renders and img[alt=NeoChef] loads /neochef-logo.png with HTTP 200, naturalWidth/naturalHeight = 1024x1024, complete=true, no broken-image icon. Asset verified server-side too: /app/frontend/build/neochef-logo.png == /app/scripts/neochef-logo.png (md5 341600d6..., 400520 bytes), PNG mode RGBA, alpha extrema (0,255), corner and top-edge pixels are (0,0,0,0) -> the previously reported opaque black matte is GONE and the logo now blends into the dark-navy/teal gradient (screenshot 01_login_logo). (2) Logged in as groupenaga@gmail.com/LeCercle123! -> module-view; opened /menu/, /taches/ and /events/: locator('[data-testid=settings-dropdown-button]').count() == 0 in all three, an explicit DOM scan for gear glyphs (U+2699 / Ionicons private-use codepoints) returned [] in all three, and the enumeration of interactive elements in the top 110px of each header contains only the hamburger (left:16) and the restaurant logo + restaurant-selector chevron (left:947, centered) — top-right of the header is empty. Header screenshots confirm visually. (3) Landing 'Paramètres' tile still navigates to /menu/#settings and renders the full settings section (Logo du restaurant, Nom du restaurant = O'Parloir, Contact, QR code, Themes) — no regression. (4) After localStorage.clear() + reload the login screen shows again with the logo at naturalWidth 1024 (session-restore/cache-bust path OK). No console errors observed; sub-app console output only shows normal data-loading logs. Backend testing skipped per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Sub-app headers (/menu/, /taches/, /events/)",
+        "issues": [
+          "Informational only: with the gear removed, the header's right side is now completely empty while the logo+restaurant-selector group stays centered at x~947 (visually slightly left of the 1920px center). Cosmetic at desktop width, no action strictly required.",
+          "Still no 'back to NeoChef hub' affordance inside the sub-apps (carried over from iteration 14, out of scope of this request)."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "The settings dropdown menu markup/handlers (Equipe, Change password, Logout) remain in all 3 index.tsx files but are now unreachable dead code since the trigger was deleted. Either delete the dead block or, better, confirm that 'Change password' and 'Logout' are still reachable for sub-app-only users — the landing hub is currently the ONLY place to log out or change a password.",
+    "The logo asset is duplicated (scripts/neochef-logo.png -> build/neochef-logo.png via build-all-apps.sh / ensure-build-and-serve.sh). Copy step is in place and verified, but keep scripts/ as the single source of truth to avoid drift."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% (5/5 requested checks passing)"},
+  "seed_data_creation": "None - used existing account groupenaga@gmail.com from /app/memory/test_credentials.md.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "groupenaga@gmail.com / LeCercle123! (holding) verified working on the landing login.",
+  "context_for_next_testing_agent": "Landing data-testids confirmed working: login-view, login-email, login-password, login-submit, module-view, tile-taches/menu/events/settings, logout-btn. Logo is now a transparent 1024x1024 RGBA PNG at /neochef-logo.png (md5 341600d63f7577b4b7acdb0a691384b7) - re-verify md5/alpha after any full rebuild since the file lives outside the Expo build output. Gear icon removed from all 3 sub-app headers (verified both by testid count and by gear-glyph DOM scan; the settings dropdown JSX is dead code now). Known pre-existing defects NOT re-reported: Ionicons tofu glyphs (chevron renders as literal 'v'), and React-Native-Web dropping raw data-testid props from TouchableOpacity - so prefer glyph/geometry-based header assertions over testid counts in sub-apps.",
+  "rca_of_the_issue": "Both user-reported defects are resolved at the asset/JSX level: the logo 404/black-box was an asset problem (now a transparent RGBA PNG copied into build/ by the build scripts, HTTP 200, 400520 bytes) and the gear was removed from headerRight in the 3 index.tsx files with the rebuilt entry-*.js bundles containing no 'settings-dropdown-button' string (grep over /app/frontend/build/*/_expo/static/js/web/entry-*.js returns nothing)."
+}

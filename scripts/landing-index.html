@@ -238,13 +238,23 @@
         registerHoldView.style.display = 'none';
         moduleView.style.display = 'none';
     }
+    function computeWelcomeSubtitle(user, restaurant) {
+        // Règle : l'utilisateur voit ce qui correspond à SON périmètre.
+        //  - Holding (user.holding_name) → affiche "Groupe Naga"
+        //  - Admin/staff lié à N>1 restaurants → affiche "N restaurants"
+        //  - Admin/staff lié à 1 restaurant → affiche le nom du restaurant
+        //  - Sinon → "Aucun restaurant"
+        if (user?.holding_name) return user.holding_name;
+        const linkedIds = Array.isArray(user?.restaurant_ids) ? user.restaurant_ids : [];
+        if (linkedIds.length > 1) return `${linkedIds.length} restaurants`;
+        if (restaurant?.name) return restaurant.name;
+        return 'Aucun restaurant';
+    }
     function showModule(user, restaurant) {
         hideAll();
         moduleView.style.display = 'block';
         welcomeName.textContent = user?.name || user?.email || 'Utilisateur';
-        welcomeRest.textContent = restaurant?.name
-            ? `${restaurant.name}${user?.holding_name ? ' · ' + user.holding_name : ''}`
-            : (user?.holding_name || 'Aucun restaurant');
+        welcomeRest.textContent = computeWelcomeSubtitle(user, restaurant);
     }
     function showLogin() {
         hideAll();

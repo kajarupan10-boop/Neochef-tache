@@ -35,8 +35,8 @@
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/logo.png",
-      "themeColor": "#C97B2A",
-      "backgroundColor": "#8E561D",
+      "themeColor": "#0b1220",
+      "backgroundColor": "#0b1220",
       "display": "standalone",
       "orientation": "portrait",
       "startUrl": "/",
@@ -77,7 +77,7 @@
           "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#8E561D"
+          "backgroundColor": "#0b1220"
         }
       ]
     ],

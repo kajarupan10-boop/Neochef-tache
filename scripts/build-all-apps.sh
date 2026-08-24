@@ -40,6 +40,8 @@ cp -r "${APPS_DIR}/neochef-events/dist" "${BUILD_DIR}/events"
 # Landing page + serve.json rewrites
 cp "${LANDING_SRC}"     "${BUILD_DIR}/index.html"
 cp "${SERVE_JSON_SRC}"  "${BUILD_DIR}/serve.json"
+# NeoChef logo (referenced by /neochef-logo.png in the landing HTML)
+cp /app/scripts/neochef-logo.png "${BUILD_DIR}/neochef-logo.png" 2>/dev/null || true
 
 # Copy favicon from taches for the landing page
 cp "${BUILD_DIR}/taches/favicon.ico" "${BUILD_DIR}/favicon.ico" 2>/dev/null || true

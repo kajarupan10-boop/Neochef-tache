@@ -384,8 +384,8 @@ interface Subtask { subtask_id: string; parent_template_id: string; name: string
 interface DailyTask { task_id: string; template_id?: string; category_id?: string; title: string; description?: string; date: string; status: 'pending' | 'completed'; is_recurring: boolean; is_sent: boolean; assigned_user_id?: string; assigned_user_name?: string; completed_by?: string; completed_at?: string; is_permanent?: boolean; permanent_task_id?: string; permanent_category_id?: string; permanent_category_name?: string; }
 interface TaskHistory { history_id: string; task_id: string; user_id: string; user_name: string; action: string; timestamp: string; }
 
-const DEFAULT_PRIMARY = '#2C5F2D';
-const DEFAULT_SECONDARY = '#EAE6CA';
+const DEFAULT_PRIMARY = '#0b1220';
+const DEFAULT_SECONDARY = '#e8f1ff';
 
 // ==================== FONCTION UNIVERSELLE TÉLÉCHARGEMENT/PARTAGE PWA ====================
 // Cette fonction gère le téléchargement de fichiers de manière fiable sur toutes les plateformes,
@@ -588,6 +588,18 @@ export default function MiseEnPlaceApp() {
       }
       
       console.log('[PWA] Meta tags injected');
+    }
+  }, []);
+
+  // Read URL hash on mount — allows the top-level landing to open a specific section (e.g. #settings)
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (hash === 'settings' || hash === 'parametres') setCurrentScreen('settings');
+      else if (hash === 'users' || hash === 'equipe') setCurrentScreen('users');
+      else if (hash === 'categories') setCurrentScreen('categories');
+      else if (hash === 'templates' || hash === 'modeles') setCurrentScreen('templates');
+      else if (hash === 'orderprep' || hash === 'preparation') setCurrentScreen('orderPrep');
     }
   }, []);
 
@@ -1311,16 +1323,8 @@ export default function MiseEnPlaceApp() {
           </TouchableOpacity>
         </View>
 
-        {/* RIGHT: Paramètres (contient Équipe, Historique, Déconnexion) */}
-        <View style={styles.headerRight}>
-          <TouchableOpacity 
-            onPress={() => setShowSettingsDropdown(!showSettingsDropdown)} 
-            style={styles.headerIconButton}
-            data-testid="settings-dropdown-button"
-          >
-            <WebIcon name="settings-outline" size={24} color={secondaryColor} />
-          </TouchableOpacity>
-        </View>
+        {/* RIGHT: bouton Paramètres retiré — remplacé par la tuile Paramètres sur la landing */}
+        <View style={styles.headerRight} />
       </View>
 
       {/* Settings Dropdown Menu */}
