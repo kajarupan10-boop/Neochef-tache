@@ -328,6 +328,7 @@ except (PermissionError, OSError) as _e:
 
 # SendGrid Configuration
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')
 FRONTEND_URL = os.environ.get('FRONTEND_URL')
 if not FRONTEND_URL:
     print("WARNING: FRONTEND_URL not set - password reset emails will not work properly")
@@ -2546,6 +2547,13 @@ class ChangeOwnPasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
+class ChangeOwnEmailRequest(BaseModel):
+    current_password: str
+    new_email: str
+
+class UpdateOwnProfileRequest(BaseModel):
+    name: Optional[str] = None
+
 @api_router.post("/auth/change-password")
 async def change_own_password(
     request: ChangeOwnPasswordRequest,
@@ -2569,6 +2577,52 @@ async def change_own_password(
     )
     
     return {"message": "Mot de passe modifié avec succès"}
+
+@api_router.post("/auth/change-email")
+async def change_own_email(
+    request: ChangeOwnEmailRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Changer son propre email (nécessite le mot de passe actuel)."""
+    new_email = (request.new_email or "").strip().lower()
+    if not new_email or "@" not in new_email or "." not in new_email:
+        raise HTTPException(status_code=400, detail="Email invalide")
+    # Vérifier le mot de passe actuel
+    user_doc = await users_collection.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not user_doc or not verify_password(request.current_password, user_doc["password_hash"]):
+        raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect")
+    # Vérifier que l'email n'est pas déjà utilisé par un autre compte
+    existing = await users_collection.find_one({"email": new_email, "user_id": {"$ne": current_user["user_id"]}})
+    if existing:
+        raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte")
+    # Idempotent: pas de changement si identique
+    if user_doc.get("email") == new_email:
+        return {"message": "Email inchangé", "email": new_email}
+    await users_collection.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$set": {"email": new_email}}
+    )
+    return {"message": "Email modifié avec succès", "email": new_email}
+
+@api_router.post("/auth/update-profile")
+async def update_own_profile(
+    request: UpdateOwnProfileRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mettre à jour son propre profil (nom pour l'instant)."""
+    update_fields = {}
+    if request.name is not None:
+        name = request.name.strip()
+        if len(name) < 1:
+            raise HTTPException(status_code=400, detail="Le nom ne peut pas être vide")
+        update_fields["name"] = name
+    if not update_fields:
+        return {"message": "Aucun champ à mettre à jour"}
+    await users_collection.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$set": update_fields}
+    )
+    return {"message": "Profil mis à jour", **update_fields}
 
 @api_router.post("/restaurants/switch")
 async def switch_restaurant(

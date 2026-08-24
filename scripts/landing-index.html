@@ -107,6 +107,7 @@
         .menu     .tile-icon { background: linear-gradient(140deg, #f6a447, #b26212); color: #fff4e0; }
         .events   .tile-icon { background: linear-gradient(140deg, #7a5cff, #4a3373); color: #eee8ff; }
         .settings .tile-icon { background: linear-gradient(140deg, #64748b, #334155); color: #e2e8f0; }
+        #edit-account-btn:hover { background: rgba(31,214,191,0.15) !important; border-color: rgba(125,211,252,0.4) !important; color: #e8f1ff !important; }
 
         .logout-bar { text-align: center; margin-top: 20px; }
         .logout-bar button {
@@ -115,6 +116,49 @@
             font-family: inherit;
         }
         .logout-bar button:hover { background: rgba(239,68,68,0.1); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
+
+        /* ===== SETTINGS VIEW ===== */
+        #settings-view .settings-header {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+        }
+        #settings-view .back-icon {
+            width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+            color: #94a3c4; cursor: pointer; font-size: 18px; transition: all .15s ease;
+            text-decoration: none;
+        }
+        #settings-view .back-icon:hover { background: rgba(255,255,255,0.1); color: #e8f1ff; }
+        #settings-view h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+        #settings-view .settings-sub { color: #94a3c4; font-size: 13px; margin: 0 0 20px; }
+        .settings-section {
+            padding: 20px 20px 16px; border-radius: 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 14px;
+        }
+        .settings-section h3 {
+            margin: 0 0 14px; font-size: 13px; font-weight: 700;
+            color: #7dd3fc; text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .settings-section .field { margin-bottom: 10px; }
+        .settings-section .btn-secondary {
+            width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(125,211,252,0.3);
+            background: rgba(31,214,191,0.08); color: #7dd3fc; font-size: 14px; font-weight: 600;
+            cursor: pointer; font-family: inherit; margin-top: 6px;
+            transition: all .15s ease;
+        }
+        .settings-section .btn-secondary:hover { background: rgba(31,214,191,0.15); border-color: rgba(125,211,252,0.5); }
+        .settings-section .btn-secondary:disabled { opacity: 0.6; cursor: wait; }
+        .settings-msg {
+            margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+            display: none; text-align: center;
+        }
+        .settings-msg.show { display: block; }
+        .settings-msg.success { background: rgba(31,214,191,0.12); border: 1px solid rgba(31,214,191,0.3); color: #7dd3fc; }
+        .settings-msg.error { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+        .account-info { display: flex; flex-direction: column; gap: 4px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .account-info .label { font-size: 11px; color: #94a3c4; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+        .account-info .value { font-size: 15px; color: #e8f1ff; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -216,7 +260,11 @@
     <section id="module-view" data-testid="module-view">
         <div class="welcome">
             <div class="welcome-eyebrow" id="welcome-eyebrow">Bienvenue</div>
-            <h2 id="welcome-name">…</h2>
+            <div style="display:inline-flex; align-items:center; gap:8px;">
+                <h2 id="welcome-name" style="margin:6px 0 4px;">…</h2>
+                <button type="button" id="edit-account-btn" data-testid="edit-account-btn" title="Modifier mon compte" aria-label="Modifier mon compte"
+                    style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#7dd3fc; width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; justify-content:center; font-family:inherit; transition:all .15s ease; padding:0;">✎</button>
+            </div>
             <p id="welcome-restaurant">…</p>
         </div>
         <div class="grid">
@@ -245,6 +293,72 @@
             <button type="button" id="logout-btn" data-testid="logout-btn">Se déconnecter</button>
         </div>
     </section>
+
+    <!-- ===== SETTINGS VIEW (post-login) ===== -->
+    <section id="settings-view" data-testid="settings-view" style="display:none;">
+        <div class="settings-header">
+            <a href="#" class="back-icon" id="settings-back" data-testid="settings-back" title="Retour">←</a>
+            <h2>Mon compte</h2>
+        </div>
+        <p class="settings-sub" id="settings-sub">Nom, email et mot de passe. Pour les paramètres du restaurant (équipe, menu, QR, couleurs…), utilisez la tuile ⚙ Paramètres.</p>
+
+        <!-- Account info -->
+        <div class="settings-section">
+            <h3>Compte</h3>
+            <div class="account-info">
+                <span class="label">Restaurant / Groupe</span>
+                <span class="value" id="settings-restaurant" data-testid="settings-restaurant">…</span>
+            </div>
+            <div class="field">
+                <label for="settings-name">Nom affiché</label>
+                <input id="settings-name" type="text" required data-testid="settings-name" />
+            </div>
+            <button type="button" class="btn-secondary" id="save-name-btn" data-testid="save-name-btn">Enregistrer le nom</button>
+            <div id="name-msg" class="settings-msg" data-testid="name-msg"></div>
+        </div>
+
+        <!-- Change email -->
+        <div class="settings-section">
+            <h3>Modifier l'email</h3>
+            <div class="field">
+                <label for="settings-current-email">Email actuel</label>
+                <input id="settings-current-email" type="email" disabled data-testid="settings-current-email" />
+            </div>
+            <div class="field">
+                <label for="settings-new-email">Nouvel email</label>
+                <input id="settings-new-email" type="email" placeholder="nouveau@email.com" data-testid="settings-new-email" />
+            </div>
+            <div class="field">
+                <label for="settings-email-pass">Mot de passe actuel</label>
+                <input id="settings-email-pass" type="password" placeholder="••••••••" data-testid="settings-email-pass" />
+            </div>
+            <button type="button" class="btn-secondary" id="save-email-btn" data-testid="save-email-btn">Modifier l'email</button>
+            <div id="email-msg" class="settings-msg" data-testid="email-msg"></div>
+        </div>
+
+        <!-- Change password -->
+        <div class="settings-section">
+            <h3>Modifier le mot de passe</h3>
+            <div class="field">
+                <label for="settings-old-pass">Mot de passe actuel</label>
+                <input id="settings-old-pass" type="password" placeholder="••••••••" data-testid="settings-old-pass" />
+            </div>
+            <div class="field">
+                <label for="settings-new-pass">Nouveau mot de passe (min. 6 caractères)</label>
+                <input id="settings-new-pass" type="password" placeholder="••••••••" minlength="6" data-testid="settings-new-pass" />
+            </div>
+            <div class="field">
+                <label for="settings-confirm-pass">Confirmer le nouveau mot de passe</label>
+                <input id="settings-confirm-pass" type="password" placeholder="••••••••" minlength="6" data-testid="settings-confirm-pass" />
+            </div>
+            <button type="button" class="btn-secondary" id="save-pass-btn" data-testid="save-pass-btn">Modifier le mot de passe</button>
+            <div id="pass-msg" class="settings-msg" data-testid="pass-msg"></div>
+        </div>
+
+        <div class="logout-bar">
+            <button type="button" id="settings-logout-btn" data-testid="settings-logout-btn">Se déconnecter</button>
+        </div>
+    </section>
 </main>
 
 <script>
@@ -259,6 +373,7 @@
     const registerRestView = document.getElementById('register-restaurant-view');
     const registerHoldView = document.getElementById('register-holding-view');
     const moduleView = document.getElementById('module-view');
+    const settingsView = document.getElementById('settings-view');
     const loginForm = document.getElementById('login-form');
     const loginError = document.getElementById('login-error');
     const submitBtn = document.getElementById('login-submit');
@@ -272,6 +387,7 @@
         registerRestView.style.display = 'none';
         registerHoldView.style.display = 'none';
         moduleView.style.display = 'none';
+        settingsView.style.display = 'none';
     }
     function computeWelcomeSubtitle(user, restaurant) {
         // Règle : l'utilisateur voit ce qui correspond à SON périmètre.
@@ -456,6 +572,126 @@
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem(RESTAURANT_KEY);
         showLogin();
+    });
+
+    // ===== SETTINGS =====
+    function currentToken() { return localStorage.getItem(TOKEN_KEY); }
+    function currentUser() { try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch { return null; } }
+    function currentRestaurant() { try { return JSON.parse(localStorage.getItem(RESTAURANT_KEY) || 'null'); } catch { return null; } }
+
+    function showSettings() {
+        hideAll();
+        settingsView.style.display = 'block';
+        const u = currentUser();
+        const r = currentRestaurant();
+        if (!u) { showLogin(); return; }
+        document.getElementById('settings-restaurant').textContent = computeWelcomeSubtitle(u, r);
+        document.getElementById('settings-name').value = u.name || '';
+        document.getElementById('settings-current-email').value = u.email || '';
+        // Clear write fields
+        ['settings-new-email','settings-email-pass','settings-old-pass','settings-new-pass','settings-confirm-pass'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        // Hide messages
+        ['name-msg','email-msg','pass-msg'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.classList.remove('show','success','error');
+        });
+        history.replaceState(null, '', '#account');
+    }
+
+    function showMsg(id, text, ok) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text;
+        el.classList.remove('success','error');
+        el.classList.add(ok ? 'success' : 'error');
+        el.classList.add('show');
+    }
+
+    document.getElementById('edit-account-btn').addEventListener('click', (e) => { e.preventDefault(); showSettings(); });
+    document.getElementById('settings-back').addEventListener('click', (e) => {
+        e.preventDefault();
+        const u = currentUser(); const r = currentRestaurant();
+        history.replaceState(null, '', '/');
+        if (u) showModule(u, r); else showLogin();
+    });
+    document.getElementById('settings-logout-btn').addEventListener('click', () => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem(RESTAURANT_KEY);
+        history.replaceState(null, '', '/');
+        showLogin();
+    });
+
+    // Save name
+    document.getElementById('save-name-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('save-name-btn');
+        const newName = document.getElementById('settings-name').value.trim();
+        if (!newName) { showMsg('name-msg','Le nom ne peut pas être vide', false); return; }
+        btn.disabled = true; const label = btn.textContent; btn.textContent = 'Enregistrement…';
+        try {
+            const res = await fetch('/api/auth/update-profile', {
+                method:'POST',
+                headers:{'Content-Type':'application/json','Authorization':`Bearer ${currentToken()}`},
+                body: JSON.stringify({ name: newName })
+            });
+            const data = await res.json();
+            if (!res.ok) { showMsg('name-msg', data?.detail || 'Erreur', false); return; }
+            const u = currentUser(); if (u) { u.name = newName; localStorage.setItem(USER_KEY, JSON.stringify(u)); }
+            showMsg('name-msg', 'Nom mis à jour', true);
+        } catch (e) { showMsg('name-msg', 'Erreur réseau', false); }
+        finally { btn.disabled = false; btn.textContent = label; }
+    });
+
+    // Save email
+    document.getElementById('save-email-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('save-email-btn');
+        const newEmail = document.getElementById('settings-new-email').value.trim();
+        const pass = document.getElementById('settings-email-pass').value;
+        if (!newEmail) { showMsg('email-msg', 'Entrez le nouvel email', false); return; }
+        if (!pass) { showMsg('email-msg', 'Entrez votre mot de passe actuel', false); return; }
+        btn.disabled = true; const label = btn.textContent; btn.textContent = 'Modification…';
+        try {
+            const res = await fetch('/api/auth/change-email', {
+                method:'POST',
+                headers:{'Content-Type':'application/json','Authorization':`Bearer ${currentToken()}`},
+                body: JSON.stringify({ current_password: pass, new_email: newEmail })
+            });
+            const data = await res.json();
+            if (!res.ok) { showMsg('email-msg', data?.detail || 'Erreur', false); return; }
+            const u = currentUser(); if (u) { u.email = data.email || newEmail; localStorage.setItem(USER_KEY, JSON.stringify(u)); }
+            document.getElementById('settings-current-email').value = data.email || newEmail;
+            document.getElementById('settings-new-email').value = '';
+            document.getElementById('settings-email-pass').value = '';
+            showMsg('email-msg', data?.message || 'Email mis à jour', true);
+        } catch (e) { showMsg('email-msg', 'Erreur réseau', false); }
+        finally { btn.disabled = false; btn.textContent = label; }
+    });
+
+    // Save password
+    document.getElementById('save-pass-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('save-pass-btn');
+        const cur = document.getElementById('settings-old-pass').value;
+        const p1 = document.getElementById('settings-new-pass').value;
+        const p2 = document.getElementById('settings-confirm-pass').value;
+        if (!cur) { showMsg('pass-msg', 'Entrez votre mot de passe actuel', false); return; }
+        if (p1.length < 6) { showMsg('pass-msg', 'Le nouveau mot de passe doit contenir au moins 6 caractères', false); return; }
+        if (p1 !== p2) { showMsg('pass-msg', 'Les mots de passe ne correspondent pas', false); return; }
+        btn.disabled = true; const label = btn.textContent; btn.textContent = 'Modification…';
+        try {
+            const res = await fetch('/api/auth/change-password', {
+                method:'POST',
+                headers:{'Content-Type':'application/json','Authorization':`Bearer ${currentToken()}`},
+                body: JSON.stringify({ current_password: cur, new_password: p1 })
+            });
+            const data = await res.json();
+            if (!res.ok) { showMsg('pass-msg', data?.detail || 'Erreur', false); return; }
+            document.getElementById('settings-old-pass').value = '';
+            document.getElementById('settings-new-pass').value = '';
+            document.getElementById('settings-confirm-pass').value = '';
+            showMsg('pass-msg', data?.message || 'Mot de passe mis à jour', true);
+        } catch (e) { showMsg('pass-msg', 'Erreur réseau', false); }
+        finally { btn.disabled = false; btn.textContent = label; }
     });
 
     // Before navigating to a sub-app, ensure the token is in its AsyncStorage-backed localStorage key

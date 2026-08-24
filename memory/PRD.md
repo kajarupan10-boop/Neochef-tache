@@ -40,6 +40,13 @@ GitHub repo (private): https://github.com/kajarupan10-boop/Neochef-tache
 
 ## Change log
 
+### 2026-08-24 — Mon compte + Forgot password fix (this session)
+- **Bug corrigé**: `POST /api/auth/forgot-password` retournait **500** (`NameError: SENDGRID_FROM_EMAIL is not defined`). Fix: chargement `SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL')` à côté de `SENDGRID_API_KEY` dans `/app/backend/server.py`. Le flow backend complet (forgot → verify → reset → login) fonctionne. **⚠️ SendGrid retourne 401 Unauthorized** (clé API révoquée/invalide) — user choix **B** = skip pour l'instant.
+- **Feature "Mon compte"** :
+  - Backend : ajouts `POST /api/auth/change-email` (nécessite current_password, gère 409 doublon), `POST /api/auth/update-profile` (change name). Endpoint existant `POST /api/auth/change-password` réutilisé.
+  - Frontend landing (`/app/scripts/landing-index.html` → copié dans `/app/frontend/build/index.html`) : petit bouton **✎** à côté du nom `Nagaratnam` dans le bandeau bienvenue. Clic → ouvre une vue "Mon compte" (name / email / password), sans toucher à la tuile ⚙ Paramètres (elle continue de pointer vers `/menu/#settings` = tous les vrais paramètres restaurant : QR, équipe, menu, couleurs, etc.).
+- **UX itérations** : initialement placé comme tuile "Mon compte" séparée → user a demandé de le retirer (trop de lignes) et remplacer par un simple bouton crayon sur la carte bienvenue. Fait.
+
 ### 2026-08-24 — Preview DB reset + events app fixes (this session)
 - **Requête utilisateur** : `Reset Preview Data — Wipe the preview MongoDB and re-seed with your real 2 restaurants + holding so the flow matches what you have on Render`.
 - **Restauration DB** : `mongorestore --db test_database /app/mongo_backup/test_database/` a restauré 21 users, 21 restaurants, 34 catégories, 36 daily tasks, 44 task templates, 3 ardoises. Vraies données : Holding "Groupe Naga" (`groupenaga@gmail.com`) lié à 2 restaurants (**Le Cercle** `rest_efb3705687ef` + **O'Parloir** `rest_17e485265f52`), staff **Tharshan** (`tharshikan@orange.fr`) sur Le Cercle.
